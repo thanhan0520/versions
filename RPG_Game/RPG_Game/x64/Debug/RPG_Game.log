@@ -1,0 +1,27 @@
+﻿  Game.cpp
+D:\RPG_Game\RPG_Game\Game.cpp(21,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+D:\RPG_Game\RPG_Game\Game.cpp(22,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+  Player.cpp
+D:\RPG_Game\RPG_Game\Player.cpp(46,18): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+D:\RPG_Game\RPG_Game\Player.cpp(46,18): warning C4244:         with
+D:\RPG_Game\RPG_Game\Player.cpp(46,18): warning C4244:         [
+D:\RPG_Game\RPG_Game\Player.cpp(46,18): warning C4244:             T=float
+D:\RPG_Game\RPG_Game\Player.cpp(46,18): warning C4244:         ]
+D:\RPG_Game\RPG_Game\Player.cpp(47,19): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+D:\RPG_Game\RPG_Game\Player.cpp(47,19): warning C4244:         with
+D:\RPG_Game\RPG_Game\Player.cpp(47,19): warning C4244:         [
+D:\RPG_Game\RPG_Game\Player.cpp(47,19): warning C4244:             T=float
+D:\RPG_Game\RPG_Game\Player.cpp(47,19): warning C4244:         ]
+D:\RPG_Game\RPG_Game\Player.cpp(48,17): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+D:\RPG_Game\RPG_Game\Player.cpp(48,17): warning C4244:         with
+D:\RPG_Game\RPG_Game\Player.cpp(48,17): warning C4244:         [
+D:\RPG_Game\RPG_Game\Player.cpp(48,17): warning C4244:             T=float
+D:\RPG_Game\RPG_Game\Player.cpp(48,17): warning C4244:         ]
+D:\RPG_Game\RPG_Game\Player.cpp(49,20): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+D:\RPG_Game\RPG_Game\Player.cpp(49,20): warning C4244:         with
+D:\RPG_Game\RPG_Game\Player.cpp(49,20): warning C4244:         [
+D:\RPG_Game\RPG_Game\Player.cpp(49,20): warning C4244:             T=float
+D:\RPG_Game\RPG_Game\Player.cpp(49,20): warning C4244:         ]
+  main.cpp
+  Generating Code...
+  RPG_Game.vcxproj -> D:\RPG_Game\x64\Debug\RPG_Game.exe
