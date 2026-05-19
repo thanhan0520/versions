@@ -68,9 +68,6 @@
     <ClInclude Include="LoginScreen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TextHelper.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="map.txt">

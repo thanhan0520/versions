@@ -1,77 +1,76 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <string>
-#include "AuthManager.h"
+#include "AuthManager.h" // Nhúng AuthManager vào để LoginScreen có thể nhận diện
 
-enum class LoginScreenState
-{
-    LOGIN,       
-    REGISTER,   
-    AUTHENTICATED   
+// Định nghĩa các trạng thái của màn hình giao diện
+enum class LoginScreenState {
+    LOGIN,
+    REGISTER,
+    AUTHENTICATED
 };
 
 class LoginScreen
 {
 public:
-    LoginScreen(int windowWidth, int windowHeight);
+    // Sửa Constructor: Nhận thêm tham chiếu AuthManager& từ main truyền vào
+    LoginScreen(int windowWidth, int windowHeight, AuthManager& auth);
     ~LoginScreen();
 
     void handleEvent(const sf::Event& event);
     void update(float dt);
     void draw(sf::RenderWindow& window);
 
+    // Các hàm bổ trợ logic
     LoginScreenState getState() const { return state; }
-    bool isAuthenticated() const { return state == LoginScreenState::AUTHENTICATED; }
     std::string getAuthenticatedUser() const { return authManager.getCurrentUser(); }
 
 private:
+    void updateLayout();
+    void drawBackground(sf::RenderWindow& window);
     void drawInputFields(sf::RenderWindow& window);
     void drawButtons(sf::RenderWindow& window);
     void drawMessages(sf::RenderWindow& window);
-    void drawBackground(sf::RenderWindow& window);
-    void drawAnimals(sf::RenderWindow& window);
-    void drawTitle(sf::RenderWindow& window);
-    void handleTextInput(sf::Uint32 unicode);
-    bool isButtonClicked(const sf::Vector2f& mousePos, const sf::FloatRect& buttonRect);
-    void updateLayout();  // Tính toán layout responsive
 
-    void clearInputs();
-    void switchToRegister();
-    void switchToLogin();
-    void attemptLogin();
-    void attemptRegister();
+    void clearInputs() {
+        usernameInput.clear();
+        passwordInput.clear();
+    }
 
-    AuthManager authManager;
+    // --- Biến quản lý trạng thái và kích thước ---
     LoginScreenState state;
+    int windowWidth;
+    int windowHeight;
 
-    sf::Font font;
-    int windowWidth, windowHeight;
-
-    // Responsive layout
-    float centerX, centerY;
-    float fieldWidth, fieldHeight;
-    float buttonWidth, buttonHeight;
-    float labelFontSize, inputFontSize, buttonFontSize;
-    float spacing;
-
-    // Input fields
+    // --- Biến lưu trữ dữ liệu người dùng nhập vào ---
     std::string usernameInput;
     std::string passwordInput;
+    std::string messageText;
+
+    // --- Quản lý focus ô nhập liệu ---
     bool usernameInputActive;
     bool passwordInputActive;
-
-    // Messages
-    std::string messageText;
     float messageTimer;
+    bool isAuthenticatedUser;
 
-    // Button rectangles
+    // --- Định hình các ô chứa (Hitbox để click chuột) ---
+    sf::FloatRect usernameFieldRect;
+    sf::FloatRect passwordFieldRect;
+
+    // Khai báo các vùng Rect của nút bấm (để sửa dứt điểm lỗi E0349 gán nhầm)
     sf::FloatRect loginButtonRect;
     sf::FloatRect registerButtonRect;
     sf::FloatRect switchToRegisterButtonRect;
     sf::FloatRect switchToLoginButtonRect;
-    sf::FloatRect forgotPasswordButtonRect;
 
-    // Input field rectangles
-    sf::FloatRect usernameFieldRect;
-    sf::FloatRect passwordFieldRect;
+    float buttonWidth;
+    float buttonHeight;
+    unsigned int labelFontSize;
+    unsigned int inputFontSize;
+    unsigned int buttonFontSize;
+
+    sf::Font font;
+
+    // TRỌNG TÂM: Khai báo tham chiếu tới AuthManager toàn cục của game
+    AuthManager& authManager;
 };

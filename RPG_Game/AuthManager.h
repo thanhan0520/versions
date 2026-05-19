@@ -1,8 +1,7 @@
 #pragma once
 #include <string>
-#include <map>
-#include <fstream>
-#include <sstream>
+#include <windows.h>
+#include <sqlext.h> // Thư viện kết nối SQL Server của Microsoft
 
 class AuthManager
 {
@@ -10,24 +9,26 @@ public:
     AuthManager();
     ~AuthManager();
 
-    // Đăng ký tài khoản mới
-    bool registerAccount(const std::string& username, const std::string& password);
+    // Đăng ký tài khoản (Yêu cầu điền thêm Email)
+    bool registerAccount(const std::string& username, const std::string& password, const std::string& email);
 
-    // Đăng nhập với tài khoản
+    // Đăng nhập
     bool login(const std::string& username, const std::string& password);
 
-    // Lấy tên người dùng hiện tại
     std::string getCurrentUser() const;
 
-    // Kiểm tra tài khoản có tồn tại không
-    bool accountExists(const std::string& username) const;
+    // --- CHỨC NĂNG LƯU/TẢI TIẾN TRÌNH OFFLINE XUỐNG SQL SERVER ---
+    bool saveGameProgress(int stage, int hp, int score);
+    bool loadGameProgress(int& stage, int& hp, int& score);
 
 private:
-    void loadAccounts();
-    void saveAccounts();
+    std::string currentUser;
     std::string hashPassword(const std::string& password) const;
 
-    std::map<std::string, std::string> accounts;  // username -> password
-    std::string currentUser;
-    std::string accountsFilePath;
+    // Các biến quản lý kết nối kết nối ODBC SQL Server
+    SQLHENV hEnv;
+    SQLHDBC hDbc;
+    bool isConnected;
+
+    void disconnect();
 };
