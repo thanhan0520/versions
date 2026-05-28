@@ -2,18 +2,13 @@
 #include "Player.h"
 #include <vector>
 
-class Rabbit : public Player
+class Snake : public Player
 {
 public:
-    Rabbit();
-
-    // Khai báo ghi đè hàm update khớp chuẩn tham số lớp cha
+    Snake();
+    virtual ~Snake() {}
     void update(float dt, const std::vector<std::vector<int>>& tiles, int tileSize, sf::RenderWindow& window) override;
-    void updateOverclock(float dt);
-    void updateBurstFire(float dt);
-
-
-protected:
+    void updateAwakening(float dt);
     void skillQ(sf::Vector2f direction) override;
     void skillW(sf::Vector2f direction,
         const std::vector<std::vector<int>>& tiles,
@@ -24,13 +19,7 @@ protected:
     void skillR(sf::Vector2f direction) override;
 
 private:
-    float overclockTimer;
-    bool isOverclocked;
-    float originalSpeed;
-    float originalDamage;
-    bool isBurstFiring = false;
-    int burstShotsLeft = 0;
-    float burstTimer = 0.0f;
-    float burstInterval = 0.08f;
-    sf::Vector2f burstDirection;
+    bool isAwakened;
+    float awakeningTimer;
+    float originalBaseDamage;
 };

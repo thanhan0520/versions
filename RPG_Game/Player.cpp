@@ -1,6 +1,7 @@
 #include "Player.h"
 #include <iostream>
 #include <cmath>
+#include <algorithm>
 
 Player::Player()
 {
@@ -17,13 +18,11 @@ Player::Player()
 	lastKeyE = false;
 	lastKeyR = false;
 
-	// Stats
 	maxHealth = 100.0f;
-	health = maxHealth;
+	health = maxHealth; // Đảm bảo lượng máu ban đầu đầy cây khi khởi tạo
 	baseDamage = 20.0f;
 	defenseBoost = 0.0f;
 
-	// Cooldown
 	skillQ_cooldown = 0.0f;
 	skillQ_cooldownMax = 0.5f;
 	skillW_cooldown = 0.0f;
@@ -36,139 +35,153 @@ Player::Player()
 
 	lastProjectilePos = shape.getPosition();
 
-	// Target locking
 	hasLockedTarget = false;
 	lockedTargetPos = sf::Vector2f(0, 0);
+	currentClass = CharacterClass::NONE;
 }
 
 bool Player::checkCollision(const sf::FloatRect& rect, const std::vector<std::vector<int>>& tiles, int tileSize)
 {
-    int leftTile = rect.left / tileSize;
-    int rightTile = (rect.left + rect.width) / tileSize;
-    int topTile = rect.top / tileSize;
-    int bottomTile = (rect.top + rect.height) / tileSize;
+	int leftTile = rect.left / tileSize;
+	int rightTile = (rect.left + rect.width) / tileSize;
+	int topTile = rect.top / tileSize;
+	int bottomTile = (rect.top + rect.height) / tileSize;
 
-    for (int y = topTile; y <= bottomTile; y++)
-    {
-        if (y < 0 || y >= (int)tiles.size()) return true;
-
-        for (int x = leftTile; x <= rightTile; x++)
-        {
-            if (x < 0 || x >= (int)tiles[0].size()) return true;
-
-            if (tiles[y][x] == 1) // tường
-                return true;
-        }
-    }
-    return false;
+	for (int y = topTile; y <= bottomTile; y++)
+	{
+		if (y < 0 || y >= (int)tiles.size()) return true;
+		for (int x = leftTile; x <= rightTile; x++)
+		{
+			if (x < 0 || x >= (int)tiles[0].size()) return true;
+			if (tiles[y][x] == 1) return true;
+		}
+	}
+	return false;
 }
 
 void Player::update(float dt, const std::vector<std::vector<int>>& tiles, int tileSize, sf::RenderWindow& window)
 {
-	// Cập nhật cooldown
 	if (skillQ_cooldown > 0) skillQ_cooldown -= dt;
 	if (skillW_cooldown > 0) skillW_cooldown -= dt;
 	if (skillE_cooldown > 0) skillE_cooldown -= dt;
-	if (skillE_duration > 0) skillE_duration -= dt;
 	if (skillR_cooldown > 0) skillR_cooldown -= dt;
 
-	// Kiểm tra input skill
+	if (skillE_duration > 0) {
+		skillE_duration -= dt;
+
+		if (skillE_duration <= 0) {
+			if (this->currentClass == CharacterClass::RABBIT) {
+				this->speed = 500.0f;
+				this->baseDamage = 28.0f;
+				this->shape.setFillColor(sf::Color(0, 191, 255));
+				std::cout << "==> Overclock Mode ended. Core cooled down! <==" << std::endl;
+			}
+			else if (this->currentClass == CharacterClass::FOX) {
+				this->speed = 400.0f;
+				this->shape.setFillColor(sf::Color(255, 69, 0));
+				std::cout << "==> Shadow Roll ended. Fox returned to normal state! <==" << std::endl;
+			}
+		}
+	}
+
 	bool keyQ = sf::Keyboard::isKeyPressed(sf::Keyboard::Q);
 	bool keyW = sf::Keyboard::isKeyPressed(sf::Keyboard::W);
 	bool keyE = sf::Keyboard::isKeyPressed(sf::Keyboard::E);
 	bool keyR = sf::Keyboard::isKeyPressed(sf::Keyboard::R);
 
-	// Q - Bắn projectile
 	if (keyQ && !lastKeyQ && skillQ_cooldown <= 0)
 	{
-		sf::Vector2i mousePixelPos = sf::Mouse::getPosition(window);
-		sf::Vector2f mouseWorldPos = window.mapPixelToCoords(mousePixelPos);
-		sf::Vector2f direction = mouseWorldPos - shape.getPosition();
-		skillQ(direction);
-		skillQ_cooldown = skillQ_cooldownMax;
-		std::cout << "Q skill used!" << std::endl;
+		if (hasLockedTarget)
+		{
+			sf::Vector2f direction = lockedTargetPos - shape.getPosition();
+
+			skillQ(direction);
+
+			skillQ_cooldown = skillQ_cooldownMax;
+		}
 	}
 	lastKeyQ = keyQ;
 
-	// W - Dịch chuyển đến projectile + dame
-	// Tìm đoạn này trong Player::update
-	if (keyW && !lastKeyW && skillW_cooldown <= 0 && !projectiles.empty())
+	if (keyW && !lastKeyW && skillW_cooldown <= 0)
 	{
-		skillW(tiles, tileSize); // Truyền thêm tiles và tileSize vào đây
-		skillW_cooldown = skillW_cooldownMax;
-		std::cout << "W skill used!" << std::endl;
+		if (hasLockedTarget)
+		{
+			sf::Vector2f direction = lockedTargetPos - shape.getPosition();
+
+			skillW(direction, tiles, tileSize);
+
+			skillW_cooldown = skillW_cooldownMax;
+		}
 	}
 	lastKeyW = keyW;
 
-	// E - Cường hóa
 	if (keyE && !lastKeyE && skillE_cooldown <= 0)
 	{
-		skillE();
-		skillE_cooldown = skillE_cooldownMax;
-		std::cout << "E skill used! Damage boosted!" << std::endl;
+		if (hasLockedTarget)
+		{
+			sf::Vector2f direction = lockedTargetPos - shape.getPosition();
+
+			skillE(direction);
+
+			skillE_cooldown = skillE_cooldownMax;
+		}
 	}
 	lastKeyE = keyE;
 
-	// R - Damage liên tiếp 3 lần
 	if (keyR && !lastKeyR && skillR_cooldown <= 0)
 	{
-		skillR();
-		skillR_cooldown = skillR_cooldownMax;
-		std::cout << "R skill used! 3x damage!" << std::endl;
+		if (hasLockedTarget)
+		{
+			sf::Vector2f direction = lockedTargetPos - shape.getPosition();
+
+			skillR(direction);
+
+			skillR_cooldown = skillR_cooldownMax;
+		}
 	}
 	lastKeyR = keyR;
 
-	// Cập nhật projectiles
 	for (auto& proj : projectiles)
 	{
 		proj.update(dt);
 		lastProjectilePos = proj.getPosition();
 	}
 
-	// Xóa projectiles đã chết
 	projectiles.erase(
 		std::remove_if(projectiles.begin(), projectiles.end(),
 			[](const Bullet& p) { return !p.isAlive(); }),
 		projectiles.end()
 	);
 
-	// Kiểm tra click chuột phải (chỉ khi nhấn xuống)
 	bool mousePressed = sf::Mouse::isButtonPressed(sf::Mouse::Right);
 	if (mousePressed && !lastMousePressed)
 	{
-		// Chuyển đổi từ window coordinates sang world coordinates
 		sf::Vector2i mousePixelPos = sf::Mouse::getPosition(window);
 		targetPosition = window.mapPixelToCoords(mousePixelPos);
 		isMoving = true;
-		std::cout << "Moving to: (" << targetPosition.x << ", " << targetPosition.y << ")" << std::endl;
 	}
 	lastMousePressed = mousePressed;
 
 	velocity = sf::Vector2f(0, 0);
 
-	// Nếu đang di chuyển, tính hướng đến đích
 	if (isMoving)
 	{
 		sf::Vector2f currentPos = shape.getPosition();
 		sf::Vector2f direction = targetPosition - currentPos;
 		float distance = sqrt(direction.x * direction.x + direction.y * direction.y);
 
-		// Nếu đến gần đích, đặt vị trí chính xác và dừng lại
 		if (distance < 2.0f)
 		{
 			shape.setPosition(targetPosition);
 			isMoving = false;
-			std::cout << "Reached target at: (" << targetPosition.x << ", " << targetPosition.y << ")" << std::endl;
 		}
 		else
 		{
-			// Chuẩn hóa hướng di chuyển
 			velocity.x = direction.x / distance;
 			velocity.y = direction.y / distance;
 		}
 	}
 
-	// Di chuyển theo X trước
 	sf::Vector2f newPos = shape.getPosition();
 	newPos.x += velocity.x * speed * dt;
 	shape.setPosition(newPos);
@@ -180,7 +193,6 @@ void Player::update(float dt, const std::vector<std::vector<int>>& tiles, int ti
 		shape.setPosition(newPos);
 	}
 
-	// Di chuyển theo Y sau
 	newPos = shape.getPosition();
 	newPos.y += velocity.y * speed * dt;
 	shape.setPosition(newPos);
@@ -196,105 +208,19 @@ void Player::update(float dt, const std::vector<std::vector<int>>& tiles, int ti
 	printTimer += dt;
 	if (printTimer >= 1.0f)
 	{
-		std::cout << "Health: " << health << "/" << maxHealth << " | Damage: " << baseDamage 
-			<< " | Defense: " << defenseBoost << " | Q cooldown: " << skillQ_cooldown 
-			<< " | Projectiles: " << projectiles.size() << std::endl;
-		if (skillE_duration > 0)
-			std::cout << "E buff active! (" << skillE_duration << "s remaining)" << std::endl;
+		std::cout << "Health: " << health << "/" << maxHealth << " | ATK: " << baseDamage
+			<< " | SPD: " << speed << " | Active Projectiles: " << projectiles.size() << std::endl;
 		printTimer = 0;
 	}
 }
 
-void Player::draw(sf::RenderWindow& window)
-{
-	window.draw(shape);
+void Player::draw(sf::RenderWindow& window) { window.draw(shape); }
+void Player::drawProjectiles(sf::RenderWindow& window) { for (auto& proj : projectiles) proj.draw(window); }
+void Player::skillQ(sf::Vector2f direction) {}
+void Player::skillW(sf::Vector2f direction,
+	const std::vector<std::vector<int>>& tiles,
+	int tileSize) {
 }
+void Player::skillE(sf::Vector2f direction) {}
 
-void Player::drawProjectiles(sf::RenderWindow& window)
-{
-	for (auto& proj : projectiles)
-	{
-		proj.draw(window);
-	}
-}
-
-// Q: Bắn projectile thẳng gây damage
-void Player::skillQ(sf::Vector2f direction)
-{
-	float damage = baseDamage;
-
-	if (hasLockedTarget)
-	{
-		direction = lockedTargetPos - shape.getPosition();
-		std::cout << "Shooting locked target!" << std::endl;
-	}
-
-	// TẠM THỜI: Tạo một texture trống để không bị lỗi Build
-	// Sau này khi làm Thỏ/Cáo, mỗi con sẽ truyền texture riêng vào đây
-	static sf::Texture dummyTexture;
-
-	// Sửa emplace_back: Thêm tham số dummyTexture vào cuối (đủ 5 tham số)
-	projectiles.emplace_back(shape.getPosition(), direction, 600.0f, damage, dummyTexture);
-}
-
-// W: Dịch chuyển đến projectile + gây damage
-// 1. Bạn hãy sửa định nghĩa hàm này trong Player.cpp
-void Player::skillW(const std::vector<std::vector<int>>& tiles, int tileSize)
-{
-	if (projectiles.empty()) return;
-
-	// Lấy vị trí viên đạn đầu tiên
-	sf::Vector2f projPos = projectiles[0].getPosition();
-
-	// Tạo một hình chữ nhật giả định tại vị trí mới để kiểm tra va chạm
-	// Chúng ta lấy kích thước hiện tại của Player (50x50)
-	sf::FloatRect futureRect(projPos.x, projPos.y, shape.getSize().x, shape.getSize().y);
-
-	// KIỂM TRA AN TOÀN: Nếu vị trí này KHÔNG va chạm với tường/ngoài map
-	if (!checkCollision(futureRect, tiles, tileSize))
-	{
-		shape.setPosition(projPos);
-		lastProjectilePos = projPos;
-
-		// Gây damage
-		float damage = baseDamage * 1.5f;
-		std::cout << "W skill: Teleport successful! Damage dealt: " << damage << std::endl;
-	}
-	else
-	{
-		// Nếu vị trí đó kẹt tường hoặc ngoài map
-		std::cout << "W skill failed: Target position is blocked or out of bounds!" << std::endl;
-	}
-
-	// Xóa projectile dù teleport thành công hay thất bại (để tránh lỗi kẹt phím)
-	projectiles[0].setAlive(false);
-}
-
-// E: Cường hóa - tăng damage + defense trong 5 giây
-void Player::skillE()
-{
-	if (skillE_duration <= 0)  // Chỉ apply buff nếu chưa có
-	{
-		baseDamage *= 1.5f;
-		defenseBoost = 10.0f;
-		skillE_duration = 5.0f;
-		std::cout << "E active! Damage: " << baseDamage << ", Defense: " << defenseBoost << std::endl;
-	}
-	else
-	{
-		// Nếu buff còn, reset lại thời gian
-		skillE_duration = 5.0f;
-		std::cout << "E buff refreshed!" << std::endl;
-	}
-}
-
-// R: Gây damage liên tiếp 3 lần
-void Player::skillR()
-{
-	float damage = baseDamage * 0.8f;
-	for (int i = 0; i < 3; i++)
-	{
-		std::cout << "R hit " << (i + 1) << "/3 - Damage: " << damage << std::endl;
-	}
-	std::cout << "Total R damage: " << (damage * 3) << std::endl;
-}
+void Player::skillR(sf::Vector2f direction) {}

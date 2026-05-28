@@ -1,41 +1,141 @@
+#pragma execution_character_set("utf-8")
 #include "LoginScreen.h"
+#include "AuthManager.h"
 #include <iostream>
 
-// Macro xử lý chuỗi Unicode tương thích C++20 và SFML
 #define UI_TEXT(str) sf::String::fromUtf8(reinterpret_cast<const sf::Uint8*>(str), reinterpret_cast<const sf::Uint8*>(str) + std::string(str).length())
 
-// Bổ sung tham số AuthManager& vào Constructor để LoginScreen có quyền gọi xuống DB
 LoginScreen::LoginScreen(int windowWidth, int windowHeight, AuthManager& auth)
-    : state(LoginScreenState::LOGIN), windowWidth(windowWidth), windowHeight(windowHeight),
-    usernameInputActive(true), passwordInputActive(false), messageTimer(0.0f), isAuthenticatedUser(false),
-    authManager(auth) // Gán liên kết tới AuthManager toàn cục
+    : state(LoginScreenState::LOGIN), windowWidth(windowWidth), windowHeight(windowHeight), authManager(auth),
+    usernameInputActive(true), passwordInputActive(false), emailInputActive(false),
+    messageTimer(0.0f), isAuthenticatedUser(false),
+    buttonWidth(180.0f), buttonHeight(45.0f),
+    labelFontSize(16), inputFontSize(18), buttonFontSize(20)
 {
-    // Tải font chữ hệ thống hỗ trợ Tiếng Việt
     if (!font.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) {
         if (!font.loadFromFile("C:/Windows/Fonts/arial.ttf")) {
-            std::cerr << "Khong the tai bat ky font chu nao!" << std::endl;
+            std::cerr << "LoginScreen: Khong the tai font chu!" << std::endl;
         }
     }
     updateLayout();
 }
 
-LoginScreen::~LoginScreen() {
-    // Destructor rỗng
+LoginScreen::~LoginScreen() {}
+
+std::string LoginScreen::getAuthenticatedUser() const {
+    return authManager.getCurrentUser();
 }
 
 void LoginScreen::updateLayout() {
-    float fieldWidth = 400.0f;
-    float fieldHeight = 45.0f;
-    float centerX = (windowWidth - fieldWidth) / 2.0f;
+    float fieldWidth = 300.0f;
+    float fieldHeight = 40.0f;
+    float startX = (windowWidth - fieldWidth) / 2.0f;
 
-    usernameFieldRect = sf::FloatRect(centerX, windowHeight * 0.4f, fieldWidth, fieldHeight);
-    passwordFieldRect = sf::FloatRect(centerX, windowHeight * 0.55f, fieldWidth, fieldHeight);
+    // Thay đổi kích thước nút nhỏ lại một chút để vừa vặn khi xếp hàng ngang
+    buttonWidth = 140.0f;
+    buttonHeight = 45.0f;
 
-    buttonWidth = 200.0f;
-    buttonHeight = 50.0f;
-    labelFontSize = 18;
-    inputFontSize = 20;
-    buttonFontSize = 22;
+    // Khoảng cách trống nhỏ ở giữa 2 nút bấm
+    float buttonGap = fieldWidth - (buttonWidth * 2); // 300 - (140 * 2) = 20px trống ở giữa
+
+    if (state == LoginScreenState::LOGIN) {
+        usernameFieldRect = sf::FloatRect(startX, windowHeight * 0.35f, fieldWidth, fieldHeight);
+        passwordFieldRect = sf::FloatRect(startX, windowHeight * 0.48f, fieldWidth, fieldHeight);
+        emailFieldRect = sf::FloatRect(0, 0, 0, 0);
+
+        // Nút thứ nhất nằm sát lề bên trái của cụm ô nhập
+        loginButtonRect = sf::FloatRect(startX, windowHeight * 0.62f, buttonWidth, buttonHeight);
+        // Nút thứ hai nằm sát lề bên phải của cụm ô nhập và cách nút một đoạn buttonGap
+        switchToRegisterButtonRect = sf::FloatRect(startX + buttonWidth + buttonGap, windowHeight * 0.62f, buttonWidth, buttonHeight);
+    }
+    else if (state == LoginScreenState::REGISTER) {
+        usernameFieldRect = sf::FloatRect(startX, windowHeight * 0.28f, fieldWidth, fieldHeight);
+        passwordFieldRect = sf::FloatRect(startX, windowHeight * 0.39f, fieldWidth, fieldHeight);
+        emailFieldRect = sf::FloatRect(startX, windowHeight * 0.50f, fieldWidth, fieldHeight);
+
+        // Áp dụng tương tự cho màn hình Đăng ký
+        registerButtonRect = sf::FloatRect(startX, windowHeight * 0.64f, buttonWidth, buttonHeight);
+        switchToLoginButtonRect = sf::FloatRect(startX + buttonWidth + buttonGap, windowHeight * 0.64f, buttonWidth, buttonHeight);
+    }
+}
+
+void LoginScreen::update(float dt) {
+    if (messageTimer > 0.0f) {
+        messageTimer -= dt;
+        if (messageTimer <= 0.0f) messageText.clear();
+    }
+}
+
+void LoginScreen::handleEvent(const sf::Event& event) {
+    if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+        sf::Vector2f mousePos(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+
+        usernameInputActive = usernameFieldRect.contains(mousePos);
+        passwordInputActive = passwordFieldRect.contains(mousePos);
+        emailInputActive = emailFieldRect.contains(mousePos);
+
+        if (state == LoginScreenState::LOGIN) {
+            if (loginButtonRect.contains(mousePos)) {
+                if (authManager.login(usernameInput, passwordInput)) {
+                    state = LoginScreenState::AUTHENTICATED;
+                }
+                else {
+                    messageText = (const char*)u8"Sai tài khoản hoặc mật khẩu!";
+                    messageTimer = 3.0f;
+                }
+            }
+            else if (switchToRegisterButtonRect.contains(mousePos)) {
+                state = LoginScreenState::REGISTER;
+                clearInputs();
+                updateLayout();
+            }
+        }
+        else if (state == LoginScreenState::REGISTER) {
+            if (registerButtonRect.contains(mousePos)) {
+                if (usernameInput.empty() || passwordInput.empty() || emailInput.empty()) {
+                    messageText = (const char*)u8"Vui lòng nhập đầy đủ thông tin!";
+                    messageTimer = 3.0f;
+                }
+                else {
+                    if (authManager.registerAccount(usernameInput, passwordInput, emailInput)) {
+                        messageText = (const char*)u8"Đăng ký thành công! Hãy đăng nhập.";
+                        messageTimer = 4.0f;
+                        state = LoginScreenState::LOGIN;
+                        clearInputs();
+                        updateLayout();
+                    }
+                    else {
+                        messageText = (const char*)u8"Tên tài khoản đã tồn tại!";
+                        messageTimer = 3.0f;
+                    }
+                }
+            }
+            else if (switchToLoginButtonRect.contains(mousePos)) {
+                state = LoginScreenState::LOGIN;
+                clearInputs();
+                updateLayout();
+            }
+        }
+    }
+
+    if (event.type == sf::Event::TextEntered) {
+        sf::Uint32 unicode = event.text.unicode;
+        if (unicode < 32 && unicode != 8) return;
+
+        std::string* targetInput = nullptr;
+        if (usernameInputActive) targetInput = &usernameInput;
+        else if (passwordInputActive) targetInput = &passwordInput;
+        else if (emailInputActive) targetInput = &emailInput;
+
+        if (targetInput != nullptr) {
+            if (unicode == 8) {
+                if (!targetInput->empty()) targetInput->pop_back();
+            }
+            else if (targetInput->length() < 30) {
+                *targetInput += static_cast<char>(unicode);
+            }
+        }
+    }
 }
 
 void LoginScreen::draw(sf::RenderWindow& window) {
@@ -47,172 +147,96 @@ void LoginScreen::draw(sf::RenderWindow& window) {
 
 void LoginScreen::drawBackground(sf::RenderWindow& window) {
     sf::RectangleShape bg(sf::Vector2f(static_cast<float>(windowWidth), static_cast<float>(windowHeight)));
-    bg.setFillColor(sf::Color(10, 30, 45));
+    bg.setFillColor(sf::Color(20, 25, 40));
     window.draw(bg);
 
-    sf::CircleShape light(windowHeight * 0.7f);
-    light.setFillColor(sf::Color(0, 150, 255, 12));
-    light.setPosition(-windowWidth * 0.1f, -windowHeight * 0.3f);
-    window.draw(light);
+    sf::Text titleText;
+    titleText.setFont(font);
+    titleText.setString(state == LoginScreenState::LOGIN ? UI_TEXT((const char*)u8"ĐĂNG NHẬP HỆ THỐNG") : UI_TEXT((const char*)u8"ĐĂNG KÝ TÀI KHOẢN"));
+    titleText.setCharacterSize(32);
+    titleText.setFillColor(sf::Color(0, 191, 255));
+    titleText.setStyle(sf::Text::Bold);
+
+    sf::FloatRect bounds = titleText.getLocalBounds();
+    titleText.setOrigin(bounds.left + bounds.width / 2.0f, bounds.top + bounds.height / 2.0f);
+    titleText.setPosition(windowWidth / 2.0f, windowHeight * 0.15f);
+    window.draw(titleText);
 }
 
 void LoginScreen::drawInputFields(sf::RenderWindow& window) {
-    // --- Ô USERNAME ---
-    sf::Text uLabel;
-    uLabel.setFont(font);
-    uLabel.setString(UI_TEXT((const char*)u8"Tên người dùng hoặc email:"));
-    uLabel.setCharacterSize(labelFontSize);
-    uLabel.setFillColor(sf::Color(160, 210, 255));
-    uLabel.setPosition(usernameFieldRect.left, usernameFieldRect.top - 35);
-    window.draw(uLabel);
+    auto drawField = [&](const sf::FloatRect& rect, const std::string& label, const std::string& value, bool isActive, bool isPassword) {
+        sf::RectangleShape fieldRect(sf::Vector2f(rect.width, rect.height));
+        fieldRect.setPosition(rect.left, rect.top);
+        fieldRect.setFillColor(sf::Color(30, 40, 60));
+        fieldRect.setOutlineThickness(isActive ? 2.0f : 1.0f);
+        fieldRect.setOutlineColor(isActive ? sf::Color(0, 191, 255) : sf::Color(100, 100, 100));
+        window.draw(fieldRect);
 
-    sf::RectangleShape uBox(sf::Vector2f(usernameFieldRect.width, usernameFieldRect.height));
-    uBox.setPosition(usernameFieldRect.left, usernameFieldRect.top);
-    uBox.setFillColor(sf::Color(20, 45, 65));
-    uBox.setOutlineThickness(2);
-    uBox.setOutlineColor(usernameInputActive ? sf::Color(0, 180, 255) : sf::Color(60, 90, 110));
-    window.draw(uBox);
+        sf::Text labelText;
+        labelText.setFont(font);
+        labelText.setString(UI_TEXT(label.c_str()));
+        labelText.setCharacterSize(labelFontSize);
+        labelText.setFillColor(sf::Color(180, 180, 180));
+        labelText.setPosition(rect.left, rect.top - 25.0f);
+        window.draw(labelText);
 
-    sf::Text uText;
-    uText.setFont(font);
-    uText.setString(sf::String::fromUtf8(reinterpret_cast<const sf::Uint8*>(usernameInput.c_str()), reinterpret_cast<const sf::Uint8*>(usernameInput.c_str()) + usernameInput.length()));
-    uText.setCharacterSize(inputFontSize);
-    uText.setFillColor(sf::Color::White);
-    uText.setPosition(usernameFieldRect.left + 12, usernameFieldRect.top + 7);
-    window.draw(uText);
+        sf::Text valueText;
+        valueText.setFont(font);
+        if (isPassword) valueText.setString(std::string(value.length(), '*'));
+        else valueText.setString(UI_TEXT(value.c_str()));
+        valueText.setCharacterSize(inputFontSize);
+        valueText.setFillColor(sf::Color::White);
+        valueText.setPosition(rect.left + 10.0f, rect.top + (rect.height - inputFontSize) / 2.0f - 4.0f);
+        window.draw(valueText);
+        };
 
-    // --- Ô PASSWORD ---
-    sf::Text pLabel = uLabel;
-    pLabel.setString(UI_TEXT((const char*)u8"Mật khẩu:"));
-    pLabel.setPosition(passwordFieldRect.left, passwordFieldRect.top - 35);
-    window.draw(pLabel);
-
-    sf::RectangleShape pBox = uBox;
-    pBox.setPosition(passwordFieldRect.left, passwordFieldRect.top);
-    pBox.setOutlineColor(passwordInputActive ? sf::Color(0, 180, 255) : sf::Color(60, 90, 110));
-    window.draw(pBox);
-
-    sf::Text pText = uText;
-    pText.setString(std::string(passwordInput.length(), '*'));
-    pText.setPosition(passwordFieldRect.left + 12, passwordFieldRect.top + 7);
-    window.draw(pText);
+    drawField(usernameFieldRect, (const char*)u8"Tài khoản:", usernameInput, usernameInputActive, false);
+    drawField(passwordFieldRect, (const char*)u8"Mật khẩu:", passwordInput, passwordInputActive, true);
+    if (state == LoginScreenState::REGISTER) {
+        drawField(emailFieldRect, (const char*)u8"Email liên hệ:", emailInput, emailInputActive, false);
+    }
 }
 
 void LoginScreen::drawButtons(sf::RenderWindow& window) {
-    const char* labelStr = (state == LoginScreenState::LOGIN) ? (const char*)u8"ĐĂNG NHẬP" : (const char*)u8"ĐĂNG KÝ";
+    auto drawBtn = [&](const sf::FloatRect& rect, const std::string& text, sf::Color color) {
+        sf::RectangleShape btn(sf::Vector2f(rect.width, rect.height));
+        btn.setPosition(rect.left, rect.top);
+        btn.setFillColor(color);
+        window.draw(btn);
 
-    sf::RectangleShape btn(sf::Vector2f(buttonWidth, buttonHeight));
-    btn.setPosition((windowWidth - buttonWidth) / 2.0f, passwordFieldRect.top + 100);
-    btn.setFillColor(sf::Color(0, 110, 210));
-    window.draw(btn);
+        sf::Text btnText;
+        btnText.setFont(font);
+        btnText.setString(UI_TEXT(text.c_str()));
+        btnText.setCharacterSize(16);
+        btnText.setFillColor(sf::Color::White);
+        btnText.setStyle(sf::Text::Bold);
 
-    sf::Text txt;
-    txt.setFont(font);
-    txt.setString(UI_TEXT(labelStr));
-    txt.setCharacterSize(buttonFontSize);
-    txt.setFillColor(sf::Color::White);
+        sf::FloatRect b = btnText.getLocalBounds();
+        btnText.setOrigin(b.left + b.width / 2.0f, b.top + b.height / 2.0f);
+        btnText.setPosition(rect.left + rect.width / 2.0f, rect.top + rect.height / 2.0f);
+        window.draw(btnText);
+        };
 
-    sf::FloatRect b = txt.getLocalBounds();
-    txt.setOrigin(b.left + b.width / 2.0f, b.top + b.height / 2.0f);
-    txt.setPosition(btn.getPosition().x + buttonWidth / 2.0f, btn.getPosition().y + buttonHeight / 2.0f);
-    window.draw(txt);
+    if (state == LoginScreenState::LOGIN) {
+        drawBtn(loginButtonRect, (const char*)u8"ĐĂNG NHẬP", sf::Color(0, 150, 255));
+        drawBtn(switchToRegisterButtonRect, (const char*)u8"TẠO TÀI KHOẢN", sf::Color(80, 80, 80));
+    }
+    else if (state == LoginScreenState::REGISTER) {
+        drawBtn(registerButtonRect, (const char*)u8"ĐĂNG KÝ NGAY", sf::Color(46, 139, 87));
+        drawBtn(switchToLoginButtonRect, (const char*)u8"QUAY LẠI", sf::Color(80, 80, 80));
+    }
 }
 
 void LoginScreen::drawMessages(sf::RenderWindow& window) {
-    if (messageTimer > 0) {
+    if (!messageText.empty()) {
         sf::Text msg;
         msg.setFont(font);
-        // Sửa lỗi gán hiển thị UTF-8
-        msg.setString(sf::String::fromUtf8(reinterpret_cast<const sf::Uint8*>(messageText.c_str()), reinterpret_cast<const sf::Uint8*>(messageText.c_str()) + messageText.length()));
-        msg.setCharacterSize(18);
-        msg.setFillColor(sf::Color(255, 100, 100));
-
+        msg.setString(UI_TEXT(messageText.c_str()));
+        msg.setCharacterSize(16);
+        msg.setFillColor(sf::Color(255, 99, 71));
         sf::FloatRect b = msg.getLocalBounds();
-        msg.setPosition((windowWidth - b.width) / 2.0f, 50.0f);
+        msg.setOrigin(b.left + b.width / 2.0f, b.top + b.height / 2.0f);
+        msg.setPosition(windowWidth / 2.0f, windowHeight * 0.76f);
         window.draw(msg);
-    }
-}
-
-void LoginScreen::handleEvent(const sf::Event& event) {
-    // 1. CHỨC NĂNG BẤM PHÍM TAB ĐỂ CHUYỂN NHANH Ô NHẬP LIỆU
-    if (event.type == sf::Event::KeyPressed) {
-        if (event.key.code == sf::Keyboard::Tab) {
-            usernameInputActive = !usernameInputActive;
-            passwordInputActive = !passwordInputActive;
-        }
-    }
-
-    // 2. LOGIC XỬ LÝ CHUỘT
-    if (event.type == sf::Event::MouseButtonPressed) {
-        sf::Vector2f mousePos(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
-
-        if (usernameFieldRect.contains(mousePos)) {
-            usernameInputActive = true;
-            passwordInputActive = false;
-        }
-        else if (passwordFieldRect.contains(mousePos)) {
-            usernameInputActive = false;
-            passwordInputActive = true;
-        }
-        else {
-            sf::RectangleShape btn(sf::Vector2f(buttonWidth, buttonHeight));
-            btn.setPosition((windowWidth - buttonWidth) / 2.0f, passwordFieldRect.top + 100);
-
-            // Đã sửa lại việc gán chuỗi chính xác sang kiểu dữ liệu std::string chuẩn
-            if (btn.getGlobalBounds().contains(mousePos)) {
-                if (state == LoginScreenState::LOGIN) {
-                    if (authManager.login(usernameInput, passwordInput)) {
-                        state = LoginScreenState::AUTHENTICATED;
-                    }
-                    else {
-                        messageText = std::string((const char*)u8"Sai tên đăng nhập hoặc mật khẩu!");
-                        messageTimer = 3.0f;
-                    }
-                }
-                else if (state == LoginScreenState::REGISTER) {
-                    std::string dummyEmail = usernameInput + "@gmail.com";
-
-                    if (authManager.registerAccount(usernameInput, passwordInput, dummyEmail)) {
-                        messageText = std::string((const char*)u8"Đăng ký thành công! Hãy đăng nhập.");
-                        messageTimer = 3.0f;
-                        state = LoginScreenState::LOGIN;
-                        passwordInput.clear();
-                    }
-                    else {
-                        messageText = std::string((const char*)u8"Đăng ký thất bại hoặc tài khoản đã tồn tại!");
-                        messageTimer = 3.0f;
-                    }
-                }
-            }
-        }
-    }
-
-    // 3. LOGIC NHẬN KÝ TỰ TỪ BÀN PHÍM
-    if (event.type == sf::Event::TextEntered) {
-        // Bỏ qua ký tự Tab (9) và Enter (13) để không bị in ký tự rác vào ô nhập liệu
-        if (event.text.unicode == 9 || event.text.unicode == 13) return;
-
-        if (usernameInputActive) {
-            if (event.text.unicode == 8 && !usernameInput.empty()) {
-                usernameInput.pop_back();
-            }
-            else if (event.text.unicode >= 32 && event.text.unicode < 127) {
-                usernameInput += static_cast<char>(event.text.unicode);
-            }
-        }
-        else if (passwordInputActive) {
-            if (event.text.unicode == 8 && !passwordInput.empty()) {
-                passwordInput.pop_back();
-            }
-            else if (event.text.unicode >= 32 && event.text.unicode < 127) {
-                passwordInput += static_cast<char>(event.text.unicode);
-            }
-        }
-    }
-}
-
-void LoginScreen::update(float dt) {
-    if (messageTimer > 0.0f) {
-        messageTimer -= dt;
     }
 }

@@ -1,1 +1,7 @@
-"# Visual Studio temporary files" 
+x64/
+Debug/
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.tlog

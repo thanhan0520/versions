@@ -2,12 +2,25 @@
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include "Bullet.h"
+#include "qvCc.h" 
+
+enum class CharacterClass {
+    NONE = 0,
+    FOX = 1,
+    RABBIT = 2,
+    SNAKE = 3,
+    DOG = 4
+};
 
 class Player
 {
 public:
     Player();
-    void update(float dt, const std::vector<std::vector<int>>& tiles, int tileSize, sf::RenderWindow& window);
+    virtual ~Player() {}
+
+    // Kích hoạt tính đa hình cho hàm update bằng từ khóa virtual
+    virtual void update(float dt, const std::vector<std::vector<int>>& tiles, int tileSize, sf::RenderWindow& window);
+
     void draw(sf::RenderWindow& window);
     void drawProjectiles(sf::RenderWindow& window);
 
@@ -18,18 +31,31 @@ public:
     float getHealth() const { return health; }
     float getMaxHealth() const { return maxHealth; }
     float getDamage() const { return baseDamage; }
-    void takeDamage(float damage) { health -= damage; }
+    bool isAlive() const { return health > 0; }
+
+    void takeDamage(float damage) {
+        if (health > 0) {
+            health -= damage;
+            if (health < 0) health = 0;
+        }
+    }
+
+    sf::FloatRect getGlobalBounds() const { return shape.getGlobalBounds(); }
+
     void setTargetEnemy(sf::Vector2f targetPos) { lockedTargetPos = targetPos; hasLockedTarget = true; }
     void clearTarget() { hasLockedTarget = false; }
 
-    // Thêm vào trong class Player, phần public:
     float getSkillQ_Cooldown() const { return skillQ_cooldown; }
     float getSkillW_Cooldown() const { return skillW_cooldown; }
     float getSkillE_Cooldown() const { return skillE_cooldown; }
     float getSkillR_Cooldown() const { return skillR_cooldown; }
 
+    void autoTargetClosestEnemy(const std::vector<qvCc>& enemies);
+    CharacterClass getCharacterClass() const { return currentClass; }
+
 protected:
-    // Hình dáng và di chuyển
+    CharacterClass currentClass;
+
     sf::RectangleShape shape;
     sf::Vector2f velocity;
     sf::Vector2f targetPosition;
@@ -37,7 +63,6 @@ protected:
     bool isMoving;
     bool lastMousePressed;
 
-    // Stats
     float health;
     float maxHealth;
     float baseDamage;
@@ -45,7 +70,6 @@ protected:
 
     sf::Texture bulletTexture;
 
-    // Skill cooldown
     float skillQ_cooldown;
     float skillQ_cooldownMax;
     float skillW_cooldown;
@@ -56,22 +80,20 @@ protected:
     float skillR_cooldown;
     float skillR_cooldownMax;
 
-    // Projectiles
     std::vector<Bullet> projectiles;
     sf::Vector2f lastProjectilePos;
 
-    // Target locking
     bool hasLockedTarget;
     sf::Vector2f lockedTargetPos;
 
-    // Keyboard tracking
     bool lastKeyQ, lastKeyW, lastKeyE, lastKeyR;
 
-    // Skill functions
-    virtual void skillQ(sf::Vector2f direction);  // Bắn projectile thẳng
-    virtual void skillW(const std::vector<std::vector<int>>& tiles, int tileSize);      // Dịch chuyển đến projectile + dame
-    virtual void skillE();                         // Cường hóa (tăng damage + defense)
-    virtual void skillR();                         // Dame liên tiếp 3 lần
+    virtual void skillQ(sf::Vector2f direction);
+    virtual void skillW(sf::Vector2f direction,
+        const std::vector<std::vector<int>>& tiles,
+        int tileSize);
+    virtual void skillE(sf::Vector2f direction);
+    virtual void skillR(sf::Vector2f direction);
 
     bool checkCollision(const sf::FloatRect& rect, const std::vector<std::vector<int>>& tiles, int tileSize);
 };

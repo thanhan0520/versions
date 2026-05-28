@@ -12,8 +12,7 @@ AuthManager::AuthManager() : currentUser(""), hEnv(NULL), hDbc(NULL), isConnecte
         if (SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDbc) == SQL_SUCCESS) {
 
             // 3. Chuỗi kết nối cấu hình chính xác theo SQL Server Express của bạn
-            // Sử dụng cú pháp gộp dấu gạch chéo ngược "\\" trong C++ cho đúng tên Server
-            std::string connStr = "Driver={ODBC Driver 17 for SQL Server};Server=PC-CANHNGUYEN\\SQLEXPRESS;Database=Game_db;Trusted_Connection=yes;";
+            std::string connStr = "Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=Game_db;Trusted_Connection=yes;";
 
             SQLCHAR outConnStr[1024];
             SQLSMALLINT outConnStrLen;
@@ -27,7 +26,7 @@ AuthManager::AuthManager() : currentUser(""), hEnv(NULL), hDbc(NULL), isConnecte
                 isConnected = true;
             }
             else {
-                std::cerr << "Loi: Khong the ket noi den SQL Server PC-CANHNGUYEN\\SQLEXPRESS!" << std::endl;
+                std::cerr << "Loi: Khong the ket noi den SQL Server" << std::endl;
             }
         }
     }
@@ -98,19 +97,24 @@ bool AuthManager::login(const std::string& username, const std::string& password
     return success;
 }
 
-bool AuthManager::saveGameProgress(int stage, int hp, int score)
+bool AuthManager::saveGameProgress(int stage, int hp, int score, int characterClass)
 {
     if (!isConnected || currentUser.empty()) return false;
 
     SQLHSTMT hStmt;
     SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
 
-    // Sử dụng cú pháp MERGE (hoặc kiểm tra EXISTS) trong SQL Server để lưu đè tiến trình cũ nếu đã có tài khoản
+    // Đã cập nhật: Bổ sung lưu thêm thông tin hệ phái nhân vật (character_class)
     std::string query =
         "IF EXISTS (SELECT 1 FROM PlayerProgress WHERE username = '" + currentUser + "') "
-        "UPDATE PlayerProgress SET current_stage = " + std::to_string(stage) + ", player_hp = " + std::to_string(hp) + ", score = " + std::to_string(score) + " WHERE username = '" + currentUser + "'; "
+        "UPDATE PlayerProgress SET current_stage = " + std::to_string(stage) +
+        ", player_hp = " + std::to_string(hp) +
+        ", score = " + std::to_string(score) +
+        ", character_class = " + std::to_string(characterClass) +
+        " WHERE username = '" + currentUser + "'; "
         "ELSE "
-        "INSERT INTO PlayerProgress (username, current_stage, player_hp, score) VALUES ('" + currentUser + "', " + std::to_string(stage) + ", " + std::to_string(hp) + ", " + std::to_string(score) + ");";
+        "INSERT INTO PlayerProgress (username, current_stage, player_hp, score, character_class) "
+        "VALUES ('" + currentUser + "', " + std::to_string(stage) + ", " + std::to_string(hp) + ", " + std::to_string(score) + ", " + std::to_string(characterClass) + ");";
 
     SQLRETURN ret = SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
     SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
@@ -118,22 +122,26 @@ bool AuthManager::saveGameProgress(int stage, int hp, int score)
     return (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO);
 }
 
-bool AuthManager::loadGameProgress(int& stage, int& hp, int& score)
+bool AuthManager::loadGameProgress(int& stage, int& hp, int& score, int& characterClass)
 {
     if (!isConnected || currentUser.empty()) return false;
 
     SQLHSTMT hStmt;
     SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
 
-    std::string query = "SELECT current_stage, player_hp, score FROM PlayerProgress WHERE username = '" + currentUser + "';";
+    // Đã cập nhật: SELECT thêm cột thứ 4 là character_class
+    std::string query = "SELECT current_stage, player_hp, score, character_class FROM PlayerProgress WHERE username = '" + currentUser + "';";
     SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
 
     bool found = false;
     if (SQLFetch(hStmt) == SQL_SUCCESS) {
-        SQLLEN cbStage, cbHp, cbScore;
+        SQLLEN cbStage, cbHp, cbScore, cbClass;
         SQLGetData(hStmt, 1, SQL_C_LONG, &stage, 0, &cbStage);
         SQLGetData(hStmt, 2, SQL_C_LONG, &hp, 0, &cbHp);
         SQLGetData(hStmt, 3, SQL_C_LONG, &score, 0, &cbScore);
+
+        // Đã cập nhật: Lấy dữ liệu cột số 4 đổ vào biến characterClass
+        SQLGetData(hStmt, 4, SQL_C_LONG, &characterClass, 0, &cbClass);
         found = true;
     }
 

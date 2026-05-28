@@ -1,9 +1,10 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <string>
-#include "AuthManager.h" // Nhúng AuthManager vào để LoginScreen có thể nhận diện
 
-// Định nghĩa các trạng thái của màn hình giao diện
+// Forward Declaration để tránh lỗi vòng lặp include chéo
+class AuthManager;
+
 enum class LoginScreenState {
     LOGIN,
     REGISTER,
@@ -13,7 +14,6 @@ enum class LoginScreenState {
 class LoginScreen
 {
 public:
-    // Sửa Constructor: Nhận thêm tham chiếu AuthManager& từ main truyền vào
     LoginScreen(int windowWidth, int windowHeight, AuthManager& auth);
     ~LoginScreen();
 
@@ -21,9 +21,9 @@ public:
     void update(float dt);
     void draw(sf::RenderWindow& window);
 
-    // Các hàm bổ trợ logic
     LoginScreenState getState() const { return state; }
-    std::string getAuthenticatedUser() const { return authManager.getCurrentUser(); }
+    std::string getAuthenticatedUser() const;
+    bool isAuthenticated() const { return state == LoginScreenState::AUTHENTICATED; }
 
 private:
     void updateLayout();
@@ -31,33 +31,31 @@ private:
     void drawInputFields(sf::RenderWindow& window);
     void drawButtons(sf::RenderWindow& window);
     void drawMessages(sf::RenderWindow& window);
-
     void clearInputs() {
         usernameInput.clear();
         passwordInput.clear();
+        emailInput.clear();
     }
 
-    // --- Biến quản lý trạng thái và kích thước ---
     LoginScreenState state;
     int windowWidth;
     int windowHeight;
 
-    // --- Biến lưu trữ dữ liệu người dùng nhập vào ---
     std::string usernameInput;
     std::string passwordInput;
+    std::string emailInput;
     std::string messageText;
 
-    // --- Quản lý focus ô nhập liệu ---
     bool usernameInputActive;
     bool passwordInputActive;
+    bool emailInputActive;
     float messageTimer;
     bool isAuthenticatedUser;
 
-    // --- Định hình các ô chứa (Hitbox để click chuột) ---
     sf::FloatRect usernameFieldRect;
     sf::FloatRect passwordFieldRect;
+    sf::FloatRect emailFieldRect;
 
-    // Khai báo các vùng Rect của nút bấm (để sửa dứt điểm lỗi E0349 gán nhầm)
     sf::FloatRect loginButtonRect;
     sf::FloatRect registerButtonRect;
     sf::FloatRect switchToRegisterButtonRect;
@@ -70,7 +68,5 @@ private:
     unsigned int buttonFontSize;
 
     sf::Font font;
-
-    // TRỌNG TÂM: Khai báo tham chiếu tới AuthManager toàn cục của game
     AuthManager& authManager;
 };

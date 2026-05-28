@@ -18,8 +18,11 @@ public:
     std::string getCurrentUser() const;
 
     // --- CHỨC NĂNG LƯU/TẢI TIẾN TRÌNH OFFLINE XUỐNG SQL SERVER ---
-    bool saveGameProgress(int stage, int hp, int score);
-    bool loadGameProgress(int& stage, int& hp, int& score);
+    // Đã cập nhật: Thêm tham số int characterClass ở cuối để lưu loài vật
+    bool saveGameProgress(int stage, int hp, int score, int characterClass);
+
+    // Đã cập nhật: Thêm tham số int& characterClass ở cuối để tải loài vật lên
+    bool loadGameProgress(int& stage, int& hp, int& score, int& characterClass);
 
 private:
     std::string currentUser;
