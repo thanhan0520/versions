@@ -50,7 +50,9 @@ public:
     BulletType getType() const { return type; }
     int getBounceCount() const { return bounceCount; }
     void decreaseBounce();
+
     void setDirection(sf::Vector2f newDir);
+    void clearHitTargets();
 
     void addHitTarget(void* targetAddress);
     bool hasHitTarget(void* targetAddress) const;

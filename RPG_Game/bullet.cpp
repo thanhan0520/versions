@@ -228,9 +228,18 @@ void Bullet::decreaseBounce() {
     if (bounceCount > 0) bounceCount--;
 }
 
-void Bullet::setDirection(sf::Vector2f newDir) {
-    float length = std::sqrt(newDir.x * newDir.x + newDir.y * newDir.y);
-    if (length != 0) { direction = newDir / length; }
+void Bullet::setDirection(sf::Vector2f newDir)
+{
+    float len =
+        std::sqrt(
+            newDir.x * newDir.x +
+            newDir.y * newDir.y
+        );
+
+    if (len > 0)
+    {
+        direction = newDir / len;
+    }
 }
 
 void Bullet::addHitTarget(void* targetAddress) {
@@ -239,4 +248,10 @@ void Bullet::addHitTarget(void* targetAddress) {
 
 bool Bullet::hasHitTarget(void* targetAddress) const {
     return std::find(hitTargets.begin(), hitTargets.end(), targetAddress) != hitTargets.end();
+}
+
+
+void Bullet::clearHitTargets()
+{
+    hitTargets.clear();
 }

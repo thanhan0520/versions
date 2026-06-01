@@ -1,7 +1,6 @@
-x64/
-Debug/
-*.obj
-*.pdb
-*.ilk
-*.idb
-*.tlog
+# Visual Studio temporary files
+.vs/
+[Db]obj/
+[Bb]in/
+*.suo
+*.user

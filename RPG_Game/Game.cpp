@@ -131,10 +131,52 @@ void Game::checkProjectileCollisions()
                 if (pType != BulletType::FOX_W && pType != BulletType::SNAKE_W &&
                     pType != BulletType::DOG_W && pType != BulletType::DOG_R_SHOCKWAVE)
                 {
-                    if (pType == BulletType::BOUNCE && proj.getBounceCount() > 0) {
-                        proj.decreaseBounce();
+                    if (pType == BulletType::BOUNCE)
+                    {
+                        int nextTarget = -1;
+
+                        float closestDist = 999999.0f;
+
+                        sf::Vector2f currentPos = proj.getPosition();
+
+                        for (size_t j = 0; j < enemies.size(); ++j)
+                        {
+                            if (j == i)
+                                continue;
+
+                            if (!enemies[j].isAlive())
+                                continue;
+
+                            float dist =
+                                std::sqrt(
+                                    std::pow(enemies[j].getPosition().x - currentPos.x, 2) +
+                                    std::pow(enemies[j].getPosition().y - currentPos.y, 2)
+                                );
+
+                            if (dist < closestDist)
+                            {
+                                closestDist = dist;
+                                nextTarget = static_cast<int>(j);
+                            }
+                        }
+
+                        // Nếu tìm được mục tiêu mới
+                        if (nextTarget != -1)
+                        {
+                            sf::Vector2f newDir =
+                                enemies[nextTarget].getPosition() - currentPos;
+
+                            proj.setDirection(newDir);
+
+                            proj.clearHitTargets();
+                        }
+                        else
+                        {
+                            proj.setAlive(false);
+                        }
                     }
-                    else {
+                    else
+                    {
                         proj.setAlive(false);
                     }
                 }

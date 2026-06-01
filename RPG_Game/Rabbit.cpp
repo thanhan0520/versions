@@ -155,7 +155,15 @@ void Rabbit::skillE(sf::Vector2f direction) {
     }
 
     // Đã đồng bộ số tham số phù hợp với hàm dựng Bullet cơ bản của bạn
-    this->projectiles.emplace_back(this->shape.getPosition(), targetDir, 600.0f, this->baseDamage * 1.6f, dummyTexture);
+    this->projectiles.emplace_back(
+        this->shape.getPosition(),
+        targetDir,
+        600.0f,
+        this->baseDamage * 1.6f,
+        dummyTexture,
+        9999,
+        BulletType::BOUNCE
+    );
 }
 
 // --- KỸ NĂNG CUỐI: OVERCLOCK MODE (R) ---

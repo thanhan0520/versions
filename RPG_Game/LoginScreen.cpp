@@ -1,9 +1,44 @@
 #pragma execution_character_set("utf-8")
 #include "LoginScreen.h"
 #include "AuthManager.h"
+#include <regex>
+#include <cctype>
 #include <iostream>
 
 #define UI_TEXT(str) sf::String::fromUtf8(reinterpret_cast<const sf::Uint8*>(str), reinterpret_cast<const sf::Uint8*>(str) + std::string(str).length())
+
+bool isValidEmail(const std::string& email)
+{
+    std::regex pattern(
+        R"(^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$)"
+    );
+
+    return std::regex_match(email, pattern);
+}
+
+bool isValidPassword(const std::string& password)
+{
+    if (password.length() < 8)
+        return false;
+
+    bool hasUpper = false;
+    bool hasLower = false;
+    bool hasDigit = false;
+
+    for (char c : password)
+    {
+        if (std::isupper(static_cast<unsigned char>(c)))
+            hasUpper = true;
+
+        if (std::islower(static_cast<unsigned char>(c)))
+            hasLower = true;
+
+        if (std::isdigit(static_cast<unsigned char>(c)))
+            hasDigit = true;
+    }
+
+    return hasUpper && hasLower && hasDigit;
+}
 
 LoginScreen::LoginScreen(int windowWidth, int windowHeight, AuthManager& auth)
     : state(LoginScreenState::LOGIN), windowWidth(windowWidth), windowHeight(windowHeight), authManager(auth),
@@ -91,20 +126,47 @@ void LoginScreen::handleEvent(const sf::Event& event) {
             }
         }
         else if (state == LoginScreenState::REGISTER) {
-            if (registerButtonRect.contains(mousePos)) {
-                if (usernameInput.empty() || passwordInput.empty() || emailInput.empty()) {
+            if (registerButtonRect.contains(mousePos))
+            {
+                if (usernameInput.empty() ||
+                    passwordInput.empty() ||
+                    emailInput.empty())
+                {
                     messageText = (const char*)u8"Vui lòng nhập đầy đủ thông tin!";
                     messageTimer = 3.0f;
                 }
-                else {
-                    if (authManager.registerAccount(usernameInput, passwordInput, emailInput)) {
+                else if (usernameInput.length() < 4)
+                {
+                    messageText = (const char*)u8"Tài khoản phải có ít nhất 4 ký tự!";
+                    messageTimer = 3.0f;
+                }
+                else if (!isValidEmail(emailInput))
+                {
+                    messageText = (const char*)u8"Email không đúng định dạng!";
+                    messageTimer = 3.0f;
+                }
+                else if (!isValidPassword(passwordInput))
+                {
+                    messageText = (const char*)u8"Mật khẩu phải từ 8 ký tự, có chữ hoa, chữ thường và số!";
+                    messageTimer = 4.0f;
+                }
+                else
+                {
+                    if (authManager.registerAccount(
+                        usernameInput,
+                        passwordInput,
+                        emailInput))
+                    {
                         messageText = (const char*)u8"Đăng ký thành công! Hãy đăng nhập.";
                         messageTimer = 4.0f;
+
                         state = LoginScreenState::LOGIN;
+
                         clearInputs();
                         updateLayout();
                     }
-                    else {
+                    else
+                    {
                         messageText = (const char*)u8"Tên tài khoản đã tồn tại!";
                         messageTimer = 3.0f;
                     }

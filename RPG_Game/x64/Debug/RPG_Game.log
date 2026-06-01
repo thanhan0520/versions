@@ -1,0 +1,101 @@
+﻿  AuthManager.cpp
+  Dog.cpp
+  Fox.cpp
+  Game.cpp
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(30,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(31,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(57,28): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(150,40): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(251,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+  LobbyScreen.cpp
+  LoginScreen.cpp
+  main.cpp
+  Map.cpp
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,46): warning C4244: 'argument': conversion from 'int' to 'T', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,46): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,46): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,46): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,46): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,36): warning C4244: 'argument': conversion from 'int' to 'T', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,36): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,36): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,36): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(7,36): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,51): warning C4244: 'argument': conversion from 'size_t' to 'T', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,51): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,51): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,51): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,51): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,37): warning C4244: 'argument': conversion from 'size_t' to 'T', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,37): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,37): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,37): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(58,37): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(84,18): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(84,18): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(84,18): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(84,18): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(84,18): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(85,19): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(85,19): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(85,19): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(85,19): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(85,19): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(86,17): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(86,17): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(86,17): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(86,17): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(86,17): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(87,20): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(87,20): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(87,20): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(87,20): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Map.cpp(87,20): warning C4244:         ]
+  bullet.cpp
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\bullet.cpp(137,20): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+  Player.cpp
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(45,15): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(45,15): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(45,15): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(45,15): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(45,15): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(46,16): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(46,16): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(46,16): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(46,16): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(46,16): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(47,14): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(47,14): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(47,14): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(47,14): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(47,14): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(48,17): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(48,17): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(48,17): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(48,17): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Player.cpp(48,17): warning C4244:         ]
+  qvCc.cpp
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(19,18): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(19,18): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(19,18): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(19,18): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(19,18): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(20,19): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(20,19): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(20,19): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(20,19): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(20,19): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(21,17): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(21,17): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(21,17): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(21,17): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(21,17): warning C4244:         ]
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(22,20): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(22,20): warning C4244:         with
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(22,20): warning C4244:         [
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(22,20): warning C4244:             T=float
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\qvCc.cpp(22,20): warning C4244:         ]
+  Rabbit.cpp
+  Snake.cpp
+  Generating Code...
+  RPG_Game.vcxproj -> E:\Cong_Nghe_Phan_Mem\versions\x64\Debug\RPG_Game.exe
