@@ -208,8 +208,8 @@ void Player::update(float dt, const std::vector<std::vector<int>>& tiles, int ti
 	printTimer += dt;
 	if (printTimer >= 1.0f)
 	{
-		std::cout << "Health: " << health << "/" << maxHealth << " | ATK: " << baseDamage
-			<< " | SPD: " << speed << " | Active Projectiles: " << projectiles.size() << std::endl;
+		std::cout << "Thong tin: HP=" << health << "/" << maxHealth << " | ATK=" << baseDamage
+			<< " | SPD=" << speed << " | Dan hien tai=" << projectiles.size() << std::endl;
 		printTimer = 0;
 	}
 }

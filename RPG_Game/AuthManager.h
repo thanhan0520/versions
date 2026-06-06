@@ -19,10 +19,15 @@ public:
 
     // --- CHỨC NĂNG LƯU/TẢI TIẾN TRÌNH OFFLINE XUỐNG SQL SERVER ---
     // Đã cập nhật: Thêm tham số int characterClass ở cuối để lưu loài vật
-    bool saveGameProgress(int stage, int hp, int score, int characterClass);
+    // Extended: include player position and monster count; defaults keep backward compatibility
+    bool saveGameProgress(int stage, int hp, int score, int characterClass, float playerX = 0.0f, float playerY = 0.0f, int monsterCount = 0);
 
     // Đã cập nhật: Thêm tham số int& characterClass ở cuối để tải loài vật lên
     bool loadGameProgress(int& stage, int& hp, int& score, int& characterClass);
+
+    // LƯU / TẢI TRẠNG THÁI TRÒ CHƠI ĐẦY ĐỦ (SERIALIZED STRING)
+    bool saveFullGameState(const std::string& serializedState);
+    bool loadFullGameState(std::string& outSerializedState);
 
 private:
     std::string currentUser;

@@ -7,6 +7,11 @@
 #include <cstdlib>
 #include <cmath>
 #include <algorithm> 
+#include <sstream>
+#include <string>
+#include "AuthManager.h"
+
+#define UI_TEXT(str) sf::String::fromUtf8(reinterpret_cast<const sf::Uint8*>(str), reinterpret_cast<const sf::Uint8*>(str) + std::string(str).length())
 
 Game::Game(sf::RenderWindow& sharedWindow)
     : window(sharedWindow), player(nullptr), selectedEnemyIndex(-1)
@@ -16,6 +21,72 @@ Game::Game(sf::RenderWindow& sharedWindow)
     camera.reset(sf::FloatRect(0, 0, 1920, 768));
     window.setView(camera);
     spawnEnemies();
+
+    // Autosave defaults
+    authManager = nullptr;
+    autosaveTimer = 0.0f;
+    autosaveInterval = 15.0f; // seconds
+    isGameOver = false;
+}
+
+// Simple serialization: "playerX,playerY,playerHP;enemyCount;ex1,ey1,ehp1;ex2,ey2,ehp2;..."
+std::string Game::serializeState() const {
+    std::ostringstream ss;
+    if (player) {
+        ss << player->getPosition().x << "," << player->getPosition().y << "," << player->getHealth();
+    }
+    else {
+        ss << "0,0,0";
+    }
+    ss << ";" << enemies.size();
+    for (const auto& e : enemies) {
+        ss << ";" << e.getPosition().x << "," << e.getPosition().y << "," << e.getHealth();
+    }
+    return ss.str();
+}
+
+bool Game::restoreState(const std::string& serialized)
+{
+    if (serialized.empty()) return false;
+    try {
+        std::vector<std::string> parts;
+        std::string cur;
+        for (char c : serialized) {
+            if (c == ';') { parts.push_back(cur); cur.clear(); }
+            else cur.push_back(c);
+        }
+        if (!cur.empty()) parts.push_back(cur);
+
+        if (parts.size() < 2) return false;
+
+        // player
+        {
+            std::istringstream ps(parts[0]);
+            float px, py, ph;
+            char comma;
+            ps >> px >> comma >> py >> comma >> ph;
+            if (player) {
+                player->setPosition(px, py);
+                player->setHealth(ph);
+                if (!player->isAlive()) {
+                    isGameOver = true;
+                }
+            }
+        }
+
+        // enemies
+        size_t enemyCount = std::stoul(parts[1]);
+        enemies.clear();
+        for (size_t i = 0; i < enemyCount && 2 + i < parts.size(); ++i) {
+            std::istringstream es(parts[2 + i]);
+            float ex, ey, eh;
+            char comma;
+            es >> ex >> comma >> ey >> comma >> eh;
+            enemies.emplace_back(sf::Vector2f(ex, ey), eh, 10.0f, 80.0f);
+        }
+        return true;
+    }
+    catch (...) { return false; }
 }
 
 Game::~Game()
@@ -31,7 +102,7 @@ void Game::spawnEnemies()
         float y = 100 + rand() % 500;
         enemies.emplace_back(sf::Vector2f(x, y), 30.0f, 10.0f, 80.0f);
     }
-    std::cout << "Trieu hoi " << enemies.size() << " thanh cong" << std::endl;
+    std::cout << "Trieu hoi " << enemies.size() << " quai thanh cong" << std::endl;
 }
 
 void Game::checkProjectileCollisions()
@@ -220,13 +291,83 @@ void Game::processEvents()
     sf::Event event;
     while (window.pollEvent(event))
     {
-        if (event.type == sf::Event::Closed)
+        if (event.type == sf::Event::Closed) {
+            // If dead, ensure state saved before close
+            if (isGameOver && authManager) {
+                std::string st = serializeState();
+                authManager->saveFullGameState(st);
+                std::cout << "Game: Luu trang thai chet truoc khi dong" << std::endl;
+            }
             window.close();
+        }
+        // If game-over overlay active, handle clicks here so we don't poll twice
+        if (isGameOver && event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            sf::Vector2f m(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+            // convert screen coords to world coords because overlay drawn in world view
+            sf::Vector2f worldPos = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+            if (gameOverBtnNew.contains(worldPos)) {
+                // Start new game: reset player and spawn new enemies
+                if (player) {
+                    player->setHealth(player->getMaxHealth());
+                    player->setPosition(512, 384);
+                    player->setCharacterClass(CharacterClass::NONE);
+                }
+                enemies.clear();
+                spawnEnemies();
+                isGameOver = false;
+                std::cout << "Game: Bat dau lai mot tran moi" << std::endl;
+                // persist
+                if (authManager) {
+                    std::string st = serializeState();
+                    authManager->saveFullGameState(st);
+                    int hpVal = player ? static_cast<int>(player->getHealth()) : 0;
+                    int charClassVal = player ? static_cast<int>(player->getCharacterClass()) : static_cast<int>(CharacterClass::NONE);
+                    float px = player ? player->getPosition().x : 0.0f;
+                    float py = player ? player->getPosition().y : 0.0f;
+                    authManager->saveGameProgress(1, hpVal, 0, charClassVal, px, py, static_cast<int>(enemies.size()));
+                }
+            }
+            else if (gameOverBtnRevive.contains(worldPos)) {
+                if (player) {
+                    player->setHealth(player->getMaxHealth() * 0.5f);
+                    isGameOver = false;
+                    std::cout << "Game: Nguoi choi da duoc hoi sinh" << std::endl;
+                    if (authManager) {
+                        std::string st = serializeState();
+                        authManager->saveFullGameState(st);
+                        int hpVal = static_cast<int>(player->getHealth());
+                        int charClassVal = static_cast<int>(player->getCharacterClass());
+                        float px = player->getPosition().x;
+                        float py = player->getPosition().y;
+                        authManager->saveGameProgress(1, hpVal, 0, charClassVal, px, py, static_cast<int>(enemies.size()));
+                    }
+                }
+            }
+        }
     }
 }
 
 void Game::update(float dt)
 {
+    // Autosave ticking
+    if (authManager != nullptr) {
+        autosaveTimer += dt;
+        if (autosaveTimer >= autosaveInterval) {
+            autosaveTimer = 0.0f;
+            // perform autosave
+            std::string state = serializeState();
+            // Save basic progress: stage=1, hp=player hp (int), score=0, class
+            int hpInt = player ? static_cast<int>(player->getHealth()) : 0;
+            int charClass = player ? static_cast<int>(player->getCharacterClass()) : 0;
+            float px = player ? player->getPosition().x : 0.0f;
+            float py = player ? player->getPosition().y : 0.0f;
+            int mcount = static_cast<int>(enemies.size());
+
+            bool ok1 = authManager->saveGameProgress(1, hpInt, 0, charClass, px, py, mcount);
+            bool ok2 = authManager->saveFullGameState(state);
+            std::cout << "Game: Autosave triggered. DB progress=" << ok1 << " full=" << ok2 << " len=" << state.size() << std::endl;
+        }
+    }
     for (auto it = rootedEnemies.begin(); it != rootedEnemies.end();) {
         it->duration -= dt;
         if (it->duration <= 0 || it->enemyIndex >= enemies.size() || !enemies[it->enemyIndex].isAlive()) {
@@ -278,9 +419,15 @@ void Game::update(float dt)
         }
         else
         {
-            // LOGIC KHI CHẾT: Nhấn nút R để hồi sinh đầy máu test tiếp
+            // Khi chết: bật game-over overlay
+            isGameOver = true;
+            // vẫn cho phép nhấn R để revive trong phiên bản chơi (debug)
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::R)) {
-                spawnEnemies();
+                // revive logic: hồi phục 50% HP và đặt lại vị trí trung tâm
+                player->setHealth(player->getMaxHealth() * 0.5f);
+                player->setPosition(512, 384);
+                isGameOver = false;
+                std::cout << "Game: Nguoi choi da duoc hoi sinh tam thoi (R)" << std::endl;
             }
         }
 
@@ -292,6 +439,7 @@ void Game::update(float dt)
             dogPlayer->setMousePosForCharge(mouseWorldPos);
             dogPlayer->updateDogTimers(dt);
         }
+
 
         Rabbit* rabbitPlayer = dynamic_cast<Rabbit*>(player);
 
@@ -460,4 +608,72 @@ void Game::render()
     }
 
     window.display();
+
+    if (isGameOver) {
+        renderGameOver();
+        window.display();
+    }
+}
+
+void Game::renderGameOver()
+{
+    if (!isGameOver) return;
+
+    sf::View prev = window.getView();
+    sf::Vector2f viewPos = window.getView().getCenter();
+    sf::Vector2f viewSize = window.getView().getSize();
+
+    sf::RectangleShape overlay(viewSize);
+    overlay.setPosition(viewPos.x - viewSize.x/2, viewPos.y - viewSize.y/2);
+    overlay.setFillColor(sf::Color(0,0,0,180));
+    window.draw(overlay);
+
+    sf::Font f;
+    if (!f.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) {
+        f.loadFromFile("C:/Windows/Fonts/arial.ttf");
+    }
+
+    sf::Text title;
+    title.setFont(f);
+    title.setString(UI_TEXT((const char*)u8"BẠN ĐÃ CHẾT"));
+    title.setCharacterSize(40);
+    title.setFillColor(sf::Color::White);
+    sf::FloatRect tb = title.getLocalBounds();
+    title.setOrigin(tb.left + tb.width/2, tb.top + tb.height/2);
+    title.setPosition(viewPos.x, viewPos.y - 60);
+    window.draw(title);
+
+    // Buttons
+    gameOverBtnNew = sf::FloatRect(viewPos.x - 140, viewPos.y + 10, 120, 45);
+    gameOverBtnRevive = sf::FloatRect(viewPos.x + 20, viewPos.y + 10, 120, 45);
+
+    sf::RectangleShape b1(sf::Vector2f(gameOverBtnNew.width, gameOverBtnNew.height));
+    b1.setPosition(gameOverBtnNew.left, gameOverBtnNew.top);
+    b1.setFillColor(sf::Color(178,34,34));
+    window.draw(b1);
+    sf::Text t1;
+    t1.setFont(f);
+    t1.setString(UI_TEXT((const char*)u8"TẠO MỚI"));
+    t1.setCharacterSize(18);
+    t1.setFillColor(sf::Color::White);
+    sf::FloatRect tb1 = t1.getLocalBounds();
+    t1.setOrigin(tb1.left + tb1.width/2, tb1.top + tb1.height/2);
+    t1.setPosition(gameOverBtnNew.left + gameOverBtnNew.width/2, gameOverBtnNew.top + gameOverBtnNew.height/2);
+    window.draw(t1);
+
+    sf::RectangleShape b2(sf::Vector2f(gameOverBtnRevive.width, gameOverBtnRevive.height));
+    b2.setPosition(gameOverBtnRevive.left, gameOverBtnRevive.top);
+    b2.setFillColor(sf::Color(34,139,34));
+    window.draw(b2);
+    sf::Text t2;
+    t2.setFont(f);
+    t2.setString(UI_TEXT((const char*)u8"HỒI SINH"));
+    t2.setCharacterSize(18);
+    t2.setFillColor(sf::Color::White);
+    sf::FloatRect tb2 = t2.getLocalBounds();
+    t2.setOrigin(tb2.left + tb2.width/2, tb2.top + tb2.height/2);
+    t2.setPosition(gameOverBtnRevive.left + gameOverBtnRevive.width/2, gameOverBtnRevive.top + gameOverBtnRevive.height/2);
+    window.draw(t2);
+
+    window.setView(prev);
 }

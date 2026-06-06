@@ -24,9 +24,26 @@ public:
 
     void run();
 
+    // Save/Load full game state as a simple serialized string
+    std::string serializeState() const;
+    bool restoreState(const std::string& serialized);
+
+    int getEnemyCount() const { return static_cast<int>(enemies.size()); }
+    void setAuthManager(class AuthManager* mgr) { authManager = mgr; }
+    void setGameOver(bool v) { isGameOver = v; }
+    bool getGameOver() const { return isGameOver; }
+
 private:
+    class AuthManager* authManager;
+    float autosaveTimer;
+    float autosaveInterval;
+    bool isGameOver;
+    bool overlayMouseDown;
+    sf::FloatRect gameOverBtnNew;
+    sf::FloatRect gameOverBtnRevive;
     void processEvents();
     void update(float dt);
+    void renderGameOver();
     void render();
     void spawnEnemies();
     void checkProjectileCollisions();

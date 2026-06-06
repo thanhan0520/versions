@@ -49,7 +49,7 @@ int main() {
     // BƯỚC 2: ĐIỀU HƯỚNG VÀO SẢNH CHỜ (LOBBY)
     // ==========================================
     if (window.isOpen() && loginScreen.isAuthenticated()) {
-        std::cout << reinterpret_cast<const char*>(u8"Dang nhap thanh cong! Dang kiem tra nhan vat tren Database...") << std::endl;
+        std::cout << "Dang nhap thanh cong! Dang kiem tra nhan vat tren Database..." << std::endl;
 
         // 1. Tải dữ liệu tiến trình chơi từ SQL Server lên
         bool hasProgress = authManager.loadGameProgress(savedStage, savedHp, savedScore, savedCharacterClass);
@@ -59,7 +59,7 @@ int main() {
         bool isValidOldData = (hasProgress && savedCharacterClass > 0);
         lobbyScreen.initLobby(isValidOldData, savedCharacterClass);
 
-        std::cout << reinterpret_cast<const char*>(u8"Chuyen huong den sanh cho he thong...") << std::endl;
+        std::cout << "Chuyen huong den sanh cho he thong..." << std::endl;
 
         // 3. CHẠY VÒNG LẶP SẢNH CHỜ (Tài khoản cũ hay mới đều phải duyệt qua đây)
         while (window.isOpen() && lobbyScreen.getState() != LobbyState::CHARACTER_SELECTED) {
@@ -76,14 +76,14 @@ int main() {
 
         // 4. CẬP NHẬT LẠI CLASS NHÂN VẬT SAU KHI RỜI SẢNH CHỜ
         savedCharacterClass = static_cast<int>(lobbyScreen.getSelectedClass());
-        std::cout << reinterpret_cast<const char*>(u8"Vao game voi nhan vat ") << savedCharacterClass << std::endl;
+        std::cout << "Vao game voi nhan vat " << savedCharacterClass << std::endl;
     }
 
     // ==========================================
     // BƯỚC 3: KHỞI TẠO GAME VÀ CHÍNH THỨC VÀO ẢI
     // ==========================================
     if (window.isOpen()) {
-        std::cout << reinterpret_cast<const char*>(u8"Chuyen canh: Dang nap tai nguyen...") << std::endl;
+        std::cout << "Chuyen canh: Dang nap tai nguyen..." << std::endl;
 
         // Tạo con trỏ Player đa hình tổng quát
         Player* mainPlayer = nullptr;
@@ -118,6 +118,30 @@ int main() {
 
         // ĐÃ MỞ COMMENT: Truyền con trỏ đa hình vào hệ thống vận hành game
         game.setPlayer(mainPlayer);
+        game.setAuthManager(&authManager);
+
+        // Ensure player's class property is set from savedCharacterClass
+        if (mainPlayer) mainPlayer->setCharacterClass(currentClass);
+
+        // Nếu người chơi chọn CHƠI TIẾP, cố gắng tải trạng thái đầy đủ từ Database
+        if (lobbyScreen.isContinuing()) {
+            std::string fullState;
+            if (authManager.loadFullGameState(fullState)) {
+                if (game.restoreState(fullState)) {
+                    std::cout << "==> Da khoi phuc tran dau tu trang thai luu tru! <==" << std::endl;
+                }
+                else {
+                    std::cout << "==> Loi khi phuc hoi trang thai. Choi tu dau." << std::endl;
+                }
+            }
+        }
+
+        // Nếu người chơi tao moi, lưu trạng thái ban dau (player pos/hp va danh sach quai vat)
+        if (!lobbyScreen.isContinuing()) {
+            // Sau khi setPlayer va spawnEnemies, serialize ban dau va luu
+            std::string startState = game.serializeState();
+            authManager.saveFullGameState(startState);
+        }
 
         game.run();
 

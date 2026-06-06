@@ -1,6 +1,19 @@
 #pragma execution_character_set("utf-8")
 #include "AuthManager.h"
 #include <iostream>
+#include <sstream>
+#include <algorithm>
+
+// Simple helper to escape single quotes for SQL string literals
+static std::string escapeForSQL(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        if (c == '\'') out.push_back('\'');
+        out.push_back(c);
+    }
+    return out;
+}
 
 AuthManager::AuthManager() : currentUser(""), hEnv(NULL), hDbc(NULL), isConnected(false)
 {
@@ -24,12 +37,141 @@ AuthManager::AuthManager() : currentUser(""), hEnv(NULL), hDbc(NULL), isConnecte
             if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
                 std::cout << "==> KET NOI DEN MICROSOFT SQL SERVER THANH CONG! <==" << std::endl;
                 isConnected = true;
-            }
-            else {
+                // Ensure PlayerProgress table and necessary columns exist
+                SQLHSTMT hStmtSchema;
+                if (SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmtSchema) == SQL_SUCCESS) {
+                    // Create table if not exists
+                    std::string createTable =
+                        "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'PlayerProgress') BEGIN "
+                        "CREATE TABLE dbo.PlayerProgress (username NVARCHAR(255) PRIMARY KEY, current_stage INT, player_hp INT, player_x FLOAT, player_y FLOAT, score INT, character_class INT, monster_count INT, full_state NVARCHAR(MAX)); END;";
+                    SQLExecDirectA(hStmtSchema, (SQLCHAR*)createTable.c_str(), SQL_NTS);
+
+                    // Add missing columns if they don't exist (safe to run repeatedly)
+                    std::string addCols[] = {
+                        "IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'player_x' AND Object_ID = Object_ID(N'dbo.PlayerProgress')) BEGIN ALTER TABLE dbo.PlayerProgress ADD player_x FLOAT NULL; END;",
+                        "IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'player_y' AND Object_ID = Object_ID(N'dbo.PlayerProgress')) BEGIN ALTER TABLE dbo.PlayerProgress ADD player_y FLOAT NULL; END;",
+                        "IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'monster_count' AND Object_ID = Object_ID(N'dbo.PlayerProgress')) BEGIN ALTER TABLE dbo.PlayerProgress ADD monster_count INT NULL; END;",
+                        "IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'full_state' AND Object_ID = Object_ID(N'dbo.PlayerProgress')) BEGIN ALTER TABLE dbo.PlayerProgress ADD full_state NVARCHAR(MAX) NULL; END;"
+                    };
+
+                    for (auto &q : addCols) {
+                        SQLExecDirectA(hStmtSchema, (SQLCHAR*)q.c_str(), SQL_NTS);
+                    }
+
+                    SQLFreeHandle(SQL_HANDLE_STMT, hStmtSchema);
+                }
+            } else {
                 std::cerr << "Loi: Khong the ket noi den SQL Server" << std::endl;
             }
         }
     }
+}
+
+bool AuthManager::saveFullGameState(const std::string& serializedState)
+{
+    if (!isConnected || currentUser.empty()) return false;
+
+    SQLHSTMT hStmt;
+    SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
+
+    // Sử dụng cột full_state để lưu JSON / chuỗi tuần tự hóa
+    std::string escUser = escapeForSQL(currentUser);
+    std::string escState = escapeForSQL(serializedState);
+    std::string query =
+        "IF EXISTS (SELECT 1 FROM PlayerProgress WHERE username = '" + escUser + "') "
+        "UPDATE PlayerProgress SET full_state = '" + escState + "' WHERE username = '" + escUser + "'; "
+        "ELSE "
+        "INSERT INTO PlayerProgress (username, current_stage, player_hp, score, character_class, full_state) "
+        "VALUES ('" + escUser + "', 1, 100, 0, 0, '" + escState + "');";
+
+    SQLRETURN ret = SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
+    SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+
+    bool ok = (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO);
+    if (ok) {
+        std::cout << "AuthManager: Luu trang thai luu tru thanh cong cho user='" << currentUser << "', len=" << serializedState.size() << std::endl;
+    }
+    else {
+        std::cerr << "AuthManager: Luu trang thai that bai cho user='" << currentUser << "'" << std::endl;
+    }
+    return ok;
+}
+
+bool AuthManager::loadFullGameState(std::string& outSerializedState)
+{
+    if (!isConnected || currentUser.empty()) return false;
+
+    SQLHSTMT hStmt;
+    SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
+
+    std::string escUser = escapeForSQL(currentUser);
+    std::string query = "SELECT full_state FROM PlayerProgress WHERE username = '" + escUser + "';";
+    SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
+
+    bool found = false;
+    if (SQLFetch(hStmt) == SQL_SUCCESS) {
+        char buf[4096];
+        SQLLEN cb;
+        SQLGetData(hStmt, 1, SQL_C_CHAR, buf, sizeof(buf), &cb);
+        if (cb == SQL_NULL_DATA) {
+            // full_state is NULL, we will try fallback to individual columns
+            outSerializedState.clear();
+            found = true; // still found a row
+        }
+        else {
+            outSerializedState = std::string(buf);
+            found = true;
+        }
+    }
+
+    SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+
+    if (found && outSerializedState.empty()) {
+        // Fallback: try to read player_x, player_y, player_hp, monster_count
+        SQLHSTMT fStmt;
+        if (SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &fStmt) == SQL_SUCCESS) {
+            std::string q2 = "SELECT player_x, player_y, player_hp, monster_count FROM PlayerProgress WHERE username = '" + escUser + "';";
+            SQLExecDirectA(fStmt, (SQLCHAR*)q2.c_str(), SQL_NTS);
+            if (SQLFetch(fStmt) == SQL_SUCCESS) {
+                double px = 512.0, py = 384.0;
+                SQLLEN cb1, cb2, cb3, cb4;
+                SQLGetData(fStmt, 1, SQL_C_DOUBLE, &px, 0, &cb1);
+                SQLGetData(fStmt, 2, SQL_C_DOUBLE, &py, 0, &cb2);
+                int php = 100;
+                int mcount = 0;
+                SQLGetData(fStmt, 3, SQL_C_LONG, &php, 0, &cb3);
+                SQLGetData(fStmt, 4, SQL_C_LONG, &mcount, 0, &cb4);
+
+                // Build a simple serialized format: playerX,playerY,playerHP;monsterCount;[placeholder monsters]
+                std::ostringstream ss;
+                ss << px << "," << py << "," << php << ";" << mcount;
+
+                // If there are monsters but no detailed data, create placeholder monsters around player
+                for (int i = 0; i < mcount; ++i) {
+                    // simple offset
+                    double ox = ((i % 5) - 2) * 50.0 + ((i % 3) * 10);
+                    double oy = ((i / 5) - 2) * 50.0 + ((i % 2) * 7);
+                    double mx = px + ox;
+                    double my = py + oy;
+                    double mhp = 30.0;
+                    ss << ";" << mx << "," << my << "," << mhp;
+                }
+
+                outSerializedState = ss.str();
+            }
+            SQLFreeHandle(SQL_HANDLE_STMT, fStmt);
+        }
+    }
+
+    if (found) {
+        std::string preview = outSerializedState.substr(0, std::min<size_t>(outSerializedState.size(), 200));
+        std::cout << "AuthManager: Tai trang thai thanh cong cho user='" << currentUser << "', len=" << outSerializedState.size() << " preview='" << preview << "'" << std::endl;
+    }
+    else {
+        std::cout << "AuthManager: Khong tim thay trang thai cho user='" << currentUser << "'" << std::endl;
+    }
+
+    return found;
 }
 
 AuthManager::~AuthManager()
@@ -97,7 +239,7 @@ bool AuthManager::login(const std::string& username, const std::string& password
     return success;
 }
 
-bool AuthManager::saveGameProgress(int stage, int hp, int score, int characterClass)
+bool AuthManager::saveGameProgress(int stage, int hp, int score, int characterClass, float playerX, float playerY, int monsterCount)
 {
     if (!isConnected || currentUser.empty()) return false;
 
@@ -111,10 +253,13 @@ bool AuthManager::saveGameProgress(int stage, int hp, int score, int characterCl
         ", player_hp = " + std::to_string(hp) +
         ", score = " + std::to_string(score) +
         ", character_class = " + std::to_string(characterClass) +
+        ", player_x = " + std::to_string(playerX) +
+        ", player_y = " + std::to_string(playerY) +
+        ", monster_count = " + std::to_string(monsterCount) +
         " WHERE username = '" + currentUser + "'; "
         "ELSE "
-        "INSERT INTO PlayerProgress (username, current_stage, player_hp, score, character_class) "
-        "VALUES ('" + currentUser + "', " + std::to_string(stage) + ", " + std::to_string(hp) + ", " + std::to_string(score) + ", " + std::to_string(characterClass) + ");";
+        "INSERT INTO PlayerProgress (username, current_stage, player_hp, player_x, player_y, score, character_class, monster_count) "
+        "VALUES ('" + currentUser + "', " + std::to_string(stage) + ", " + std::to_string(hp) + ", " + std::to_string(playerX) + ", " + std::to_string(playerY) + ", " + std::to_string(score) + ", " + std::to_string(characterClass) + ", " + std::to_string(monsterCount) + ");";
 
     SQLRETURN ret = SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
     SQLFreeHandle(SQL_HANDLE_STMT, hStmt);

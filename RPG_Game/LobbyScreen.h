@@ -24,6 +24,7 @@ public:
 
     void initLobby(bool hasOldProgress, int oldClass);
     void reset() { state = LobbyState::DECIDING; selectedClass = CharacterClass::NONE; }
+    bool isContinuing() const { return choseContinue; }
 
 private:
     LobbyState state;
@@ -44,6 +45,8 @@ private:
 
     sf::FloatRect continueButtonRect;
     sf::FloatRect newGameButtonRect;
+
+    bool choseContinue;
 
     void drawBackground(sf::RenderWindow& window);
     void drawDecisionScreen(sf::RenderWindow& window);

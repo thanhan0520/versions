@@ -2,11 +2,11 @@
   Dog.cpp
   Fox.cpp
   Game.cpp
-E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(30,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(31,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(57,28): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(150,40): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(251,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(101,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(102,17): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(128,28): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(221,40): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+E:\Cong_Nghe_Phan_Mem\versions\RPG_Game\Game.cpp(392,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
   LobbyScreen.cpp
   LoginScreen.cpp
   main.cpp

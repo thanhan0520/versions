@@ -8,6 +8,7 @@ LobbyScreen::LobbyScreen(int windowWidth, int windowHeight, AuthManager& auth)
     : state(LobbyState::CHOOSING), selectedClass(CharacterClass::NONE), authManager(auth),
     windowWidth(windowWidth), windowHeight(windowHeight), hasSavedData(false), savedClassID(0)
 {
+    choseContinue = false;
     if (!font.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) {
         if (!font.loadFromFile("C:/Windows/Fonts/arial.ttf")) {
             std::cerr << "LobbyScreen: Khong the tai font chu!" << std::endl;
@@ -167,12 +168,14 @@ void LobbyScreen::handleEvent(const sf::Event& event, sf::RenderWindow& window) 
         if (state == LobbyState::DECIDING) {
             if (continueButtonRect.contains(mousePos)) {
                 // Người chơi chọn chơi tiếp -> Lấy class cũ đã lưu trong Database
+                choseContinue = true;
                 selectedClass = static_cast<CharacterClass>(savedClassID);
                 state = LobbyState::CHARACTER_SELECTED; // Cho qua màn sảnh luôn
                 std::cout << "Lobby: Nguoi choi chon CHOI TIEP voi nhan vat cu." << std::endl;
             }
             else if (newGameButtonRect.contains(mousePos)) {
                 // Người chơi muốn tạo mới -> Chuyển sang màn hình chọn 4 con vật
+                choseContinue = false;
                 state = LobbyState::CHOOSING;
                 std::cout << "Lobby: Nguoi choi chon TAO MOI, mo menu chon linh thu..." << std::endl;
             }
@@ -194,11 +197,11 @@ void LobbyScreen::handleEvent(const sf::Event& event, sf::RenderWindow& window) 
                 // Khởi tạo ghi đè dữ liệu mới tinh xuống SQL Server
                 bool saved = authManager.saveGameProgress(1, 100, 0, charClassInt);
 
-                if (saved) {
-                    std::cout << "Lobby: Da ghi de nhan vat moi (ID: " << charClassInt << ") xuong SQL Server!" << std::endl;
+                    if (saved) {
+                    std::cout << "Lobby: Da luu nhan vat moi (ID: " << charClassInt << ") len Database" << std::endl;
                 }
                 else {
-                    std::cerr << "Lobby: Loi! Khong the ghi nhan vat moi vao Database." << std::endl;
+                    std::cerr << "Lobby: Loi! Khong the luu nhan vat vao Database." << std::endl;
                 }
             }
         }

@@ -40,6 +40,8 @@ public:
         }
     }
 
+    void setHealth(float h) { health = h; if (health < 0) health = 0; }
+
     sf::FloatRect getGlobalBounds() const { return shape.getGlobalBounds(); }
 
     void setTargetEnemy(sf::Vector2f targetPos) { lockedTargetPos = targetPos; hasLockedTarget = true; }
@@ -52,6 +54,7 @@ public:
 
     void autoTargetClosestEnemy(const std::vector<qvCc>& enemies);
     CharacterClass getCharacterClass() const { return currentClass; }
+    void setCharacterClass(CharacterClass c) { currentClass = c; }
 
 protected:
     CharacterClass currentClass;
