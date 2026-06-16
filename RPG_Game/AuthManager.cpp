@@ -241,30 +241,92 @@ bool AuthManager::login(const std::string& username, const std::string& password
 
 bool AuthManager::saveGameProgress(int stage, int hp, int score, int characterClass, float playerX, float playerY, int monsterCount)
 {
-    if (!isConnected || currentUser.empty()) return false;
+    if (!isConnected || currentUser.empty()) {
+        std::cerr << "AuthManager::saveGameProgress: Not connected or no user set" << std::endl;
+        return false;
+    }
 
-    SQLHSTMT hStmt;
+    SQLHSTMT hStmt = NULL;
     SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
 
-    // Đã cập nhật: Bổ sung lưu thêm thông tin hệ phái nhân vật (character_class)
-    std::string query =
-        "IF EXISTS (SELECT 1 FROM PlayerProgress WHERE username = '" + currentUser + "') "
-        "UPDATE PlayerProgress SET current_stage = " + std::to_string(stage) +
-        ", player_hp = " + std::to_string(hp) +
-        ", score = " + std::to_string(score) +
-        ", character_class = " + std::to_string(characterClass) +
-        ", player_x = " + std::to_string(playerX) +
-        ", player_y = " + std::to_string(playerY) +
-        ", monster_count = " + std::to_string(monsterCount) +
-        " WHERE username = '" + currentUser + "'; "
-        "ELSE "
-        "INSERT INTO PlayerProgress (username, current_stage, player_hp, player_x, player_y, score, character_class, monster_count) "
-        "VALUES ('" + currentUser + "', " + std::to_string(stage) + ", " + std::to_string(hp) + ", " + std::to_string(playerX) + ", " + std::to_string(playerY) + ", " + std::to_string(score) + ", " + std::to_string(characterClass) + ", " + std::to_string(monsterCount) + ");";
+    std::string escUser = escapeForSQL(currentUser);
 
-    SQLRETURN ret = SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
-    SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+    // Try parameterized UPDATE first
+    const char* updSql = "UPDATE PlayerProgress SET current_stage = ?, player_hp = ?, score = ?, character_class = ?, player_x = ?, player_y = ?, monster_count = ? WHERE username = ?;";
+    SQLRETURN ret = SQLPrepareA(hStmt, (SQLCHAR*)updSql, SQL_NTS);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        std::cerr << "AuthManager::saveGameProgress - SQLPrepareA failed for UPDATE with code " << ret << std::endl;
+    } else {
+        // Bind parameters: 1-stage,2-hp,3-score,4-characterClass,5-playerX,6-playerY,7-monsterCount,8-username
+        SQLLEN indStage = 0, indHp = 0, indScore = 0, indClass = 0, indMonster = 0;
+        SQLLEN indPx = 0, indPy = 0, indUser = SQL_NTS;
+        SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&stage, 0, &indStage);
+        SQLBindParameter(hStmt, 2, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&hp, 0, &indHp);
+        SQLBindParameter(hStmt, 3, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&score, 0, &indScore);
+        SQLBindParameter(hStmt, 4, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&characterClass, 0, &indClass);
+        SQLBindParameter(hStmt, 5, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE, 0, 0, (SQLPOINTER)&playerX, 0, &indPx);
+        SQLBindParameter(hStmt, 6, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE, 0, 0, (SQLPOINTER)&playerY, 0, &indPy);
+        SQLBindParameter(hStmt, 7, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&monsterCount, 0, &indMonster);
+        SQLBindParameter(hStmt, 8, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, escUser.size(), 0, (SQLPOINTER)escUser.c_str(), 0, &indUser);
 
-    return (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO);
+        ret = SQLExecute(hStmt);
+        if (!(ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)) {
+            std::cerr << "AuthManager::saveGameProgress - UPDATE execute failed with code " << ret << std::endl;
+            SQLCHAR sqlState[6]; SQLINTEGER nativeErr; SQLCHAR msg[512]; SQLSMALLINT msgLen;
+            if (SQLGetDiagRecA(SQL_HANDLE_STMT, hStmt, 1, sqlState, &nativeErr, msg, sizeof(msg), &msgLen) == SQL_SUCCESS) {
+                std::cerr << "ODBC Error: SQLState=" << sqlState << " nativeErr=" << nativeErr << " msg=" << msg << std::endl;
+            }
+        }
+
+        // Check affected rows
+        SQLLEN rowCount = -1;
+        if (SQLRowCount(hStmt, &rowCount) == SQL_SUCCESS) {
+            // rowCount contains number of rows affected
+        }
+
+        if (rowCount <= 0) {
+            // No row updated -> try insert
+            SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+            hStmt = NULL;
+            SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
+            const char* insSql = "INSERT INTO PlayerProgress (username, current_stage, player_hp, player_x, player_y, score, character_class, monster_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+            ret = SQLPrepareA(hStmt, (SQLCHAR*)insSql, SQL_NTS);
+            if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+                std::cerr << "AuthManager::saveGameProgress - SQLPrepareA failed for INSERT with code " << ret << std::endl;
+            } else {
+                // Bind parameters: 1-username,2-stage,3-hp,4-playerX,5-playerY,6-score,7-characterClass,8-monsterCount
+                SQLLEN indUser2 = SQL_NTS;
+                SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, escUser.size(), 0, (SQLPOINTER)escUser.c_str(), 0, &indUser2);
+                SQLBindParameter(hStmt, 2, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&stage, 0, &indStage);
+                SQLBindParameter(hStmt, 3, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&hp, 0, &indHp);
+                SQLBindParameter(hStmt, 4, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE, 0, 0, (SQLPOINTER)&playerX, 0, &indPx);
+                SQLBindParameter(hStmt, 5, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE, 0, 0, (SQLPOINTER)&playerY, 0, &indPy);
+                SQLBindParameter(hStmt, 6, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&score, 0, &indScore);
+                SQLBindParameter(hStmt, 7, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&characterClass, 0, &indClass);
+                SQLBindParameter(hStmt, 8, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&monsterCount, 0, &indMonster);
+
+                ret = SQLExecute(hStmt);
+                if (!(ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)) {
+                    std::cerr << "AuthManager::saveGameProgress - INSERT execute failed with code " << ret << std::endl;
+                    SQLCHAR sqlState[6]; SQLINTEGER nativeErr; SQLCHAR msg[512]; SQLSMALLINT msgLen;
+                    if (SQLGetDiagRecA(SQL_HANDLE_STMT, hStmt, 1, sqlState, &nativeErr, msg, sizeof(msg), &msgLen) == SQL_SUCCESS) {
+                        std::cerr << "ODBC Error: SQLState=" << sqlState << " nativeErr=" << nativeErr << " msg=" << msg << std::endl;
+                    }
+                }
+            }
+        }
+    }
+
+    bool ok = (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO);
+    if (ok) {
+        std::cout << "AuthManager::saveGameProgress - Save succeeded for user='" << currentUser << "' score=" << score << " stage=" << stage << std::endl;
+    } else {
+        std::cerr << "AuthManager::saveGameProgress - Save failed for user='" << currentUser << "' score=" << score << " stage=" << stage << " code=" << ret << std::endl;
+    }
+
+    if (hStmt) SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+
+    return ok;
 }
 
 bool AuthManager::loadGameProgress(int& stage, int& hp, int& score, int& characterClass)

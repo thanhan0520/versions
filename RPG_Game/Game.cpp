@@ -29,6 +29,22 @@ Game::Game(sf::RenderWindow& sharedWindow)
     isGameOver = false;
 }
 
+void Game::addScore(int delta) {
+    score += delta;
+}
+
+void Game::spawnPotion(sf::Vector2f pos, float healAmount)
+{
+    Potion p;
+    p.pos = pos;
+    p.healAmount = healAmount;
+    p.alive = true;
+    p.shape = sf::CircleShape(10.0f);
+    p.shape.setFillColor(sf::Color(255, 105, 180)); // pinkish
+    p.shape.setPosition(pos - sf::Vector2f(10,10));
+    potions.push_back(p);
+}
+
 // Simple serialization: "playerX,playerY,playerHP;enemyCount;ex1,ey1,ehp1;ex2,ey2,ehp2;..."
 std::string Game::serializeState() const {
     std::ostringstream ss;
@@ -41,6 +57,11 @@ std::string Game::serializeState() const {
     ss << ";" << enemies.size();
     for (const auto& e : enemies) {
         ss << ";" << e.getPosition().x << "," << e.getPosition().y << "," << e.getHealth();
+    }
+    // serialize potions after enemies
+    for (const auto &p : potions) {
+        if (!p.alive) continue;
+        ss << ";" << p.pos.x << "," << p.pos.y << "," << p.healAmount;
     }
     return ss.str();
 }
@@ -84,6 +105,27 @@ bool Game::restoreState(const std::string& serialized)
             es >> ex >> comma >> ey >> comma >> eh;
             enemies.emplace_back(sf::Vector2f(ex, ey), eh, 10.0f, 80.0f);
         }
+        // initialize enemyCounted vector to same size
+        enemyCounted.clear();
+        enemyCounted.resize(enemies.size(), false);
+        // potions (optional part)
+        if (parts.size() > 2 + enemyCount) {
+            potions.clear();
+            for (size_t i = 0; i < parts.size() - (2 + enemyCount); ++i) {
+                std::istringstream ps(parts[2 + enemyCount + i]);
+                float px, py, ph;
+                char comma;
+                ps >> px >> comma >> py >> comma >> ph;
+                Potion p;
+                p.pos = sf::Vector2f(px, py);
+                p.healAmount = ph;
+                p.alive = true;
+                p.shape = sf::CircleShape(10.0f);
+                p.shape.setFillColor(sf::Color(255, 105, 180));
+                p.shape.setPosition(p.pos - sf::Vector2f(10,10));
+                potions.push_back(p);
+            }
+        }
         return true;
     }
     catch (...) { return false; }
@@ -103,6 +145,8 @@ void Game::spawnEnemies()
         enemies.emplace_back(sf::Vector2f(x, y), 30.0f, 10.0f, 80.0f);
     }
     std::cout << "Trieu hoi " << enemies.size() << " quai thanh cong" << std::endl;
+    enemyCounted.clear();
+    enemyCounted.resize(enemies.size(), false);
 }
 
 void Game::checkProjectileCollisions()
@@ -135,7 +179,9 @@ void Game::checkProjectileCollisions()
                         enemy.addPoisonStack(4.0f, 0.5f);
                     }
                     else if (proj.getUltTimer() >= 3.0f && !proj.hasTriggeredRoot()) {
-                        enemy.takeDamage(proj.getDamage());
+                        float dmg = proj.getDamage();
+                        enemy.takeDamage(dmg);
+                        std::cout << "Projectile AOE hit: type=" << static_cast<int>(pType) << " idx=" << i << " dmg=" << dmg << " hpAfter=" << enemy.getHealth() << std::endl;
                         enemy.applySlow(2.5f, 1.0f);
                     }
                 }
@@ -170,7 +216,9 @@ void Game::checkProjectileCollisions()
                 if (!proj.hasHitTarget(&enemy))
                 {
                     // --- GÂY SÁT THƯƠNG CHUNG ---
-                    enemy.takeDamage(proj.getDamage());
+                    float dmg = proj.getDamage();
+                    enemy.takeDamage(dmg);
+                    std::cout << "Projectile hit: type=" << static_cast<int>(pType) << " idx=" << i << " dmg=" << dmg << " hpAfter=" << enemy.getHealth() << std::endl;
                     proj.addHitTarget(&enemy);
                     std::cout << "-> Trung quai! Tru " << proj.getDamage() << " HP." << std::endl;
 
@@ -281,7 +329,38 @@ void Game::run()
     {
         float dt = clock.restart().asSeconds();
         processEvents();
-        update(dt);
+
+        // If pause menu requested return to main, exit run loop so caller can handle lobby
+        if (returnToMain) {
+            std::cout << "Game::run: exit requested to return to main" << std::endl;
+            break;
+        }
+
+        // Toggle pause via Escape key (checked here so we capture toggles between frames)
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Escape)) {
+            if (!lastEscPressed) {
+                paused = !paused;
+                if (paused) {
+                    if (authManager) {
+                        std::string st = serializeState();
+                        authManager->saveFullGameState(st);
+                        int hpVal = player ? static_cast<int>(player->getHealth()) : 0;
+                        int charClassVal = player ? static_cast<int>(player->getCharacterClass()) : 0;
+                        float px = player ? player->getPosition().x : 0.0f;
+                        float py = player ? player->getPosition().y : 0.0f;
+                        authManager->saveGameProgress(1, hpVal, score, charClassVal, px, py, static_cast<int>(enemies.size()));
+                        std::cout << "Game: Paused and autosaved" << std::endl;
+                    }
+                } else {
+                    std::cout << "Game: Resumed" << std::endl;
+                }
+            }
+            lastEscPressed = true;
+        } else {
+            lastEscPressed = false;
+        }
+
+        if (!paused) update(dt);
         render();
     }
 }
@@ -301,30 +380,76 @@ void Game::processEvents()
             window.close();
         }
         // If game-over overlay active, handle clicks here so we don't poll twice
+        // If pause menu active, handle its clicks first
+        if (paused && event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            sf::Vector2f worldPos = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+            if (pauseBtnResume.contains(worldPos)) {
+                paused = false;
+                std::cout << "Game: Resumed from pause" << std::endl;
+            }
+            else if (pauseBtnSave.contains(worldPos)) {
+                if (authManager) {
+                    std::string st = serializeState();
+                    authManager->saveFullGameState(st);
+                    int hpVal = player ? static_cast<int>(player->getHealth()) : 0;
+                    int charClassVal = player ? static_cast<int>(player->getCharacterClass()) : 0;
+                    float px = player ? player->getPosition().x : 0.0f;
+                    float py = player ? player->getPosition().y : 0.0f;
+                    authManager->saveGameProgress(1, hpVal, score, charClassVal, px, py, static_cast<int>(enemies.size()));
+                    std::cout << "Game: Saved from pause menu" << std::endl;
+                }
+            }
+            else if (pauseBtnReturnMain.contains(worldPos)) {
+                // Return to lobby (without closing window). Caller will handle lobby flow.
+                returnToMain = true;
+                paused = false;
+                std::cout << "Game: Returning to lobby (sanh cho)" << std::endl;
+            }
+            else if (pauseBtnExit.contains(worldPos)) {
+                // Close window to fully exit
+                if (authManager) {
+                    std::string st = serializeState();
+                    authManager->saveFullGameState(st);
+                }
+                window.close();
+                std::cout << "Game: Exiting application from pause menu" << std::endl;
+            }
+            continue; // consume event when paused
+        }
+
+        // If not paused, allow clicking the HUD pause button
+        if (!paused && event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            sf::Vector2f worldPos = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+            if (pauseHudRect.contains(worldPos)) {
+                paused = true;
+                if (authManager) {
+                        std::string st = serializeState();
+                        authManager->saveFullGameState(st);
+                        int hpVal = player ? static_cast<int>(player->getHealth()) : 0;
+                        int charClassVal = player ? static_cast<int>(player->getCharacterClass()) : 0;
+                        float px = player ? player->getPosition().x : 0.0f;
+                        float py = player ? player->getPosition().y : 0.0f;
+                        std::cout << "Game: Saving progress (user='" << authManager->getCurrentUser() << "', class=" << charClassVal << ", score=" << score << ")" << std::endl;
+                        authManager->saveGameProgress(1, hpVal, score, charClassVal, px, py, static_cast<int>(enemies.size()));
+                }
+                continue;
+            }
+        }
+
         if (isGameOver && event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
             sf::Vector2f m(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
             // convert screen coords to world coords because overlay drawn in world view
             sf::Vector2f worldPos = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
             if (gameOverBtnNew.contains(worldPos)) {
-                // Start new game: reset player and spawn new enemies
-                if (player) {
-                    player->setHealth(player->getMaxHealth());
-                    player->setPosition(512, 384);
-                    player->setCharacterClass(CharacterClass::NONE);
-                }
-                enemies.clear();
-                spawnEnemies();
+                // Return to main screen / lobby instead of creating a new game
+                returnToMain = true;
                 isGameOver = false;
-                std::cout << "Game: Bat dau lai mot tran moi" << std::endl;
-                // persist
+                paused = false;
+                std::cout << "Game: Returning to main screen from game over" << std::endl;
+                // persist full state if available
                 if (authManager) {
                     std::string st = serializeState();
                     authManager->saveFullGameState(st);
-                    int hpVal = player ? static_cast<int>(player->getHealth()) : 0;
-                    int charClassVal = player ? static_cast<int>(player->getCharacterClass()) : static_cast<int>(CharacterClass::NONE);
-                    float px = player ? player->getPosition().x : 0.0f;
-                    float py = player ? player->getPosition().y : 0.0f;
-                    authManager->saveGameProgress(1, hpVal, 0, charClassVal, px, py, static_cast<int>(enemies.size()));
                 }
             }
             else if (gameOverBtnRevive.contains(worldPos)) {
@@ -339,7 +464,8 @@ void Game::processEvents()
                         int charClassVal = static_cast<int>(player->getCharacterClass());
                         float px = player->getPosition().x;
                         float py = player->getPosition().y;
-                        authManager->saveGameProgress(1, hpVal, 0, charClassVal, px, py, static_cast<int>(enemies.size()));
+                        std::cout << "Game: Saving progress (user='" << authManager->getCurrentUser() << "', class=" << charClassVal << ", score=" << score << ")" << std::endl;
+                        authManager->saveGameProgress(1, hpVal, score, charClassVal, px, py, static_cast<int>(enemies.size()));
                     }
                 }
             }
@@ -363,7 +489,7 @@ void Game::update(float dt)
             float py = player ? player->getPosition().y : 0.0f;
             int mcount = static_cast<int>(enemies.size());
 
-            bool ok1 = authManager->saveGameProgress(1, hpInt, 0, charClass, px, py, mcount);
+            bool ok1 = authManager->saveGameProgress(1, hpInt, score, charClass, px, py, mcount);
             bool ok2 = authManager->saveFullGameState(state);
             std::cout << "Game: Autosave triggered. DB progress=" << ok1 << " full=" << ok2 << " len=" << state.size() << std::endl;
         }
@@ -496,6 +622,37 @@ void Game::update(float dt)
                     player->takeDamage(damageAmount);
                 }
             }
+            // If enemy just died this frame, nothing here; potion/score awarding handled in post-pass
+            if (!enemies[i].isAlive()) {
+                // nothing here; handled later
+            }
+        }
+    }
+
+    // Separate pass: award score for any enemies that died during projectile processing or earlier but weren't counted
+    for (size_t i = 0; i < enemies.size(); ++i) {
+        if (!enemies[i].isAlive()) {
+            if (i < enemyCounted.size() && !enemyCounted[i]) {
+                // Award score
+                addScore(10);
+                enemyCounted[i] = true;
+                std::cout << "Game: Giat diem khi diet quai -> +10. Total=" << score << std::endl;
+
+                // Potion drop chance
+                float r = static_cast<float>(rand()) / RAND_MAX;
+                if (r < potionDropRate) {
+                    float healAmt = potionHealFraction * (player ? player->getMaxHealth() : 100.0f);
+                    spawnPotion(enemies[i].getPosition(), healAmt);
+                    std::cout << "Game: Quai roi mau va rot potion (+" << healAmt << ")" << std::endl;
+                }
+
+                // Save immediate
+                if (authManager) {
+                    int hpVal = player ? static_cast<int>(player->getHealth()) : 0;
+                    int charClassVal = player ? static_cast<int>(player->getCharacterClass()) : 0;
+                    authManager->saveGameProgress(1, hpVal, score, charClassVal, player ? player->getPosition().x : 0.0f, player ? player->getPosition().y : 0.0f, static_cast<int>(enemies.size()));
+                }
+            }
         }
     }
 
@@ -519,6 +676,30 @@ void Game::update(float dt)
         sf::Vector2f currentPtPos = player->getPosition();
         camera.setCenter(currentPtPos);
         window.setView(camera);
+    }
+
+    // potion pickup handling
+    if (player != nullptr) {
+        for (auto &pt : potions) {
+            if (!pt.alive) continue;
+            sf::FloatRect pr(pt.pos.x - 10, pt.pos.y - 10, 20, 20);
+            if (pr.intersects(player->getGlobalBounds())) {
+                float oldHp = player->getHealth();
+                float newHp = oldHp + pt.healAmount;
+                if (newHp > player->getMaxHealth()) newHp = player->getMaxHealth();
+                player->setHealth(newHp);
+                pt.alive = false;
+                std::cout << "Game: Nguoi choi nhan potion +" << pt.healAmount << " HP. Current=" << newHp << "\n";
+                // save state immediately
+                if (authManager) {
+                    std::string st = serializeState();
+                    authManager->saveFullGameState(st);
+                    int hpVal = static_cast<int>(player->getHealth());
+                    int charClassVal = static_cast<int>(player->getCharacterClass());
+                    authManager->saveGameProgress(1, hpVal, score, charClassVal, player->getPosition().x, player->getPosition().y, static_cast<int>(enemies.size()));
+                }
+            }
+        }
     }
 }
 
@@ -551,6 +732,12 @@ void Game::render()
         {
             enemies[i].draw(window);
         }
+    }
+
+    // draw potions
+    for (auto &pt : potions) {
+        if (!pt.alive) continue;
+        window.draw(pt.shape);
     }
 
     if (player != nullptr) {
@@ -605,14 +792,127 @@ void Game::render()
             }
             window.draw(slot);
         }
+
+        // Draw score box next to HP bar
+        {
+            float scoreBoxW = 160.0f;
+            float scoreBoxH = 36.0f;
+            float scoreX = hpStartX + 260 + 12.0f;
+            float scoreY = hpStartY;
+            sf::RectangleShape scoreBg(sf::Vector2f(scoreBoxW, scoreBoxH));
+            scoreBg.setPosition(scoreX, scoreY);
+            scoreBg.setFillColor(sf::Color(50, 50, 50, 200));
+            scoreBg.setOutlineThickness(2);
+            scoreBg.setOutlineColor(sf::Color::White);
+            window.draw(scoreBg);
+
+            sf::Font f2;
+            if (!f2.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) f2.loadFromFile("C:/Windows/Fonts/arial.ttf");
+            sf::Text scoreText;
+            scoreText.setFont(f2);
+            std::string s = std::string((const char*)u8"Điểm: ") + std::to_string(score);
+            scoreText.setString(UI_TEXT(s.c_str()));
+            scoreText.setCharacterSize(18);
+            scoreText.setFillColor(sf::Color::White);
+            sf::FloatRect tb = scoreText.getLocalBounds();
+            scoreText.setOrigin(tb.left, tb.top + tb.height/2);
+            scoreText.setPosition(scoreX + 8.0f, scoreY + scoreBoxH/2.0f);
+            window.draw(scoreText);
+        }
+    }
+
+    // Draw larger pause button on HUD (top-right)
+    {
+        sf::Vector2f viewPos = window.getView().getCenter();
+        sf::Vector2f viewSize = window.getView().getSize();
+        float bx = viewPos.x + viewSize.x/2 - 80;
+        float by = viewPos.y - viewSize.y/2 + 10;
+        pauseHudRect = sf::FloatRect(bx, by, 64, 40);
+        sf::RectangleShape pauseBtn(sf::Vector2f(pauseHudRect.width, pauseHudRect.height));
+        pauseBtn.setPosition(pauseHudRect.left, pauseHudRect.top);
+        pauseBtn.setFillColor(sf::Color(50,50,50,220));
+        pauseBtn.setOutlineThickness(2);
+        pauseBtn.setOutlineColor(sf::Color::White);
+        window.draw(pauseBtn);
+        sf::Font f;
+        if (!f.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) f.loadFromFile("C:/Windows/Fonts/arial.ttf");
+        sf::Text t; t.setFont(f); t.setString(UI_TEXT((const char*)u8"||")); t.setCharacterSize(24); t.setFillColor(sf::Color::White);
+        sf::FloatRect tb = t.getLocalBounds(); t.setOrigin(tb.left + tb.width/2, tb.top + tb.height/2); t.setPosition(pauseHudRect.left + pauseHudRect.width/2, pauseHudRect.top + pauseHudRect.height/2 - 2); window.draw(t);
+    }
+
+    // Draw overlays (game over / pause) and present once to avoid flicker
+    if (isGameOver) {
+        renderGameOver();
+    }
+
+    if (paused && !isGameOver) {
+        renderPauseMenu();
     }
 
     window.display();
+}
 
-    if (isGameOver) {
-        renderGameOver();
-        window.display();
+void Game::renderPauseMenu()
+{
+    sf::View prev = window.getView();
+    sf::Vector2f viewPos = window.getView().getCenter();
+    sf::Vector2f viewSize = window.getView().getSize();
+
+    sf::RectangleShape overlay(viewSize);
+    overlay.setPosition(viewPos.x - viewSize.x/2, viewPos.y - viewSize.y/2);
+    overlay.setFillColor(sf::Color(0,0,0,180));
+    window.draw(overlay);
+
+    sf::Font f;
+    if (!f.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) {
+        f.loadFromFile("C:/Windows/Fonts/arial.ttf");
     }
+
+    sf::Text title;
+    title.setFont(f);
+    title.setString(UI_TEXT((const char*)u8"PAUSED"));
+    title.setCharacterSize(36);
+    title.setFillColor(sf::Color::White);
+    sf::FloatRect tb = title.getLocalBounds();
+    title.setOrigin(tb.left + tb.width/2, tb.top + tb.height/2);
+    title.setPosition(viewPos.x, viewPos.y - 80);
+    window.draw(title);
+
+    // Buttons: Resume (Tiếp tục), Save (Lưu game), Return to Lobby (Về sảnh chờ), Exit (Thoát game)
+    pauseBtnResume = sf::FloatRect(viewPos.x - 260, viewPos.y - 30, 180, 70);
+    pauseBtnSave = sf::FloatRect(viewPos.x - 60, viewPos.y - 30, 180, 70);
+    pauseBtnReturnMain = sf::FloatRect(viewPos.x + 140, viewPos.y - 30, 200, 70);
+    pauseBtnExit = sf::FloatRect(viewPos.x + 360, viewPos.y - 30, 160, 70);
+
+    sf::RectangleShape b1(sf::Vector2f(pauseBtnResume.width, pauseBtnResume.height));
+    b1.setPosition(pauseBtnResume.left, pauseBtnResume.top);
+    b1.setFillColor(sf::Color(70,130,180));
+    window.draw(b1);
+    sf::Text t1; t1.setFont(f); t1.setString(UI_TEXT((const char*)u8"Tiếp tục")); t1.setCharacterSize(26); t1.setFillColor(sf::Color::White);
+    sf::FloatRect tb1 = t1.getLocalBounds(); t1.setOrigin(tb1.left + tb1.width/2, tb1.top + tb1.height/2); t1.setPosition(pauseBtnResume.left + pauseBtnResume.width/2, pauseBtnResume.top + pauseBtnResume.height/2); window.draw(t1);
+
+    sf::RectangleShape b2(sf::Vector2f(pauseBtnSave.width, pauseBtnSave.height));
+    b2.setPosition(pauseBtnSave.left, pauseBtnSave.top);
+    b2.setFillColor(sf::Color(34,139,34));
+    window.draw(b2);
+    sf::Text t2; t2.setFont(f); t2.setString(UI_TEXT((const char*)u8"Lưu game")); t2.setCharacterSize(26); t2.setFillColor(sf::Color::White);
+    sf::FloatRect tb2 = t2.getLocalBounds(); t2.setOrigin(tb2.left + tb2.width/2, tb2.top + tb2.height/2); t2.setPosition(pauseBtnSave.left + pauseBtnSave.width/2, pauseBtnSave.top + pauseBtnSave.height/2); window.draw(t2);
+
+    sf::RectangleShape b3(sf::Vector2f(pauseBtnReturnMain.width, pauseBtnReturnMain.height));
+    b3.setPosition(pauseBtnReturnMain.left, pauseBtnReturnMain.top);
+    b3.setFillColor(sf::Color(200,140,20));
+    window.draw(b3);
+    sf::Text t3; t3.setFont(f); t3.setString(UI_TEXT((const char*)u8"Về sảnh chờ")); t3.setCharacterSize(22); t3.setFillColor(sf::Color::White);
+    sf::FloatRect tb3 = t3.getLocalBounds(); t3.setOrigin(tb3.left + tb3.width/2, tb3.top + tb3.height/2); t3.setPosition(pauseBtnReturnMain.left + pauseBtnReturnMain.width/2, pauseBtnReturnMain.top + pauseBtnReturnMain.height/2); window.draw(t3);
+
+    sf::RectangleShape b4(sf::Vector2f(pauseBtnExit.width, pauseBtnExit.height));
+    b4.setPosition(pauseBtnExit.left, pauseBtnExit.top);
+    b4.setFillColor(sf::Color(178,34,34));
+    window.draw(b4);
+    sf::Text t4; t4.setFont(f); t4.setString(UI_TEXT((const char*)u8"Thoát game")); t4.setCharacterSize(22); t4.setFillColor(sf::Color::White);
+    sf::FloatRect tb4 = t4.getLocalBounds(); t4.setOrigin(tb4.left + tb4.width/2, tb4.top + tb4.height/2); t4.setPosition(pauseBtnExit.left + pauseBtnExit.width/2, pauseBtnExit.top + pauseBtnExit.height/2); window.draw(t4);
+
+    window.setView(prev);
 }
 
 void Game::renderGameOver()
@@ -643,20 +943,41 @@ void Game::renderGameOver()
     title.setPosition(viewPos.x, viewPos.y - 60);
     window.draw(title);
 
-    // Buttons
-    gameOverBtnNew = sf::FloatRect(viewPos.x - 140, viewPos.y + 10, 120, 45);
-    gameOverBtnRevive = sf::FloatRect(viewPos.x + 20, viewPos.y + 10, 120, 45);
+    // Buttons: size them dynamically to fit their text
+    sf::Text t1;
+    t1.setFont(f);
+    t1.setString(UI_TEXT((const char*)u8"TRỞ VỀ MÀN HÌNH CHÍNH"));
+    t1.setCharacterSize(18);
+    t1.setFillColor(sf::Color::White);
+    sf::FloatRect tb1 = t1.getLocalBounds();
+
+    sf::Text t2;
+    t2.setFont(f);
+    t2.setString(UI_TEXT((const char*)u8"HỒI SINH"));
+    t2.setCharacterSize(18);
+    t2.setFillColor(sf::Color::White);
+    sf::FloatRect tb2 = t2.getLocalBounds();
+
+    float paddingX = 40.0f; // horizontal padding inside button
+    float paddingY = 20.0f; // vertical padding inside button
+    float gap = 20.0f; // gap between buttons
+
+    float btnWidth1 = tb1.width + paddingX;
+    float btnWidth2 = tb2.width + paddingX;
+    float btnHeight = std::max(tb1.height, tb2.height) + paddingY;
+
+    float totalWidth = btnWidth1 + gap + btnWidth2;
+    float leftStart = viewPos.x - totalWidth/2.0f;
+    float top = viewPos.y + 10.0f;
+
+    gameOverBtnNew = sf::FloatRect(leftStart, top, btnWidth1, btnHeight);
+    gameOverBtnRevive = sf::FloatRect(leftStart + btnWidth1 + gap, top, btnWidth2, btnHeight);
 
     sf::RectangleShape b1(sf::Vector2f(gameOverBtnNew.width, gameOverBtnNew.height));
     b1.setPosition(gameOverBtnNew.left, gameOverBtnNew.top);
     b1.setFillColor(sf::Color(178,34,34));
     window.draw(b1);
-    sf::Text t1;
-    t1.setFont(f);
-    t1.setString(UI_TEXT((const char*)u8"TẠO MỚI"));
-    t1.setCharacterSize(18);
-    t1.setFillColor(sf::Color::White);
-    sf::FloatRect tb1 = t1.getLocalBounds();
+    tb1 = t1.getLocalBounds();
     t1.setOrigin(tb1.left + tb1.width/2, tb1.top + tb1.height/2);
     t1.setPosition(gameOverBtnNew.left + gameOverBtnNew.width/2, gameOverBtnNew.top + gameOverBtnNew.height/2);
     window.draw(t1);
@@ -665,12 +986,7 @@ void Game::renderGameOver()
     b2.setPosition(gameOverBtnRevive.left, gameOverBtnRevive.top);
     b2.setFillColor(sf::Color(34,139,34));
     window.draw(b2);
-    sf::Text t2;
-    t2.setFont(f);
-    t2.setString(UI_TEXT((const char*)u8"HỒI SINH"));
-    t2.setCharacterSize(18);
-    t2.setFillColor(sf::Color::White);
-    sf::FloatRect tb2 = t2.getLocalBounds();
+    tb2 = t2.getLocalBounds();
     t2.setOrigin(tb2.left + tb2.width/2, tb2.top + tb2.height/2);
     t2.setPosition(gameOverBtnRevive.left + gameOverBtnRevive.width/2, gameOverBtnRevive.top + gameOverBtnRevive.height/2);
     window.draw(t2);

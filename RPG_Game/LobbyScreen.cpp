@@ -9,6 +9,7 @@ LobbyScreen::LobbyScreen(int windowWidth, int windowHeight, AuthManager& auth)
     windowWidth(windowWidth), windowHeight(windowHeight), hasSavedData(false), savedClassID(0)
 {
     choseContinue = false;
+    deadWarningActive = false;
     if (!font.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) {
         if (!font.loadFromFile("C:/Windows/Fonts/arial.ttf")) {
             std::cerr << "LobbyScreen: Khong the tai font chu!" << std::endl;
@@ -22,6 +23,9 @@ LobbyScreen::~LobbyScreen() {}
 void LobbyScreen::initLobby(bool hasOldProgress, int oldClass) {
     hasSavedData = hasOldProgress;
     savedClassID = oldClass;
+    // reset choice and recompute layout (in case window changed)
+    choseContinue = false;
+    updateLayout();
 
     if (hasSavedData) {
         state = LobbyState::DECIDING; // Nếu có dữ liệu cũ, bắt người chơi chọn "Chơi tiếp" hoặc "Tạo mới"
@@ -55,6 +59,15 @@ void LobbyScreen::updateLayout() {
 
     continueButtonRect = sf::FloatRect(decStartX, decStartY, btnWidth, btnHeight);
     newGameButtonRect = sf::FloatRect(decStartX + btnWidth + btnGap, decStartY, btnWidth, btnHeight);
+
+    // dialog buttons for dead warning (centered)
+    float warnBtnWidth = 300.0f;
+    float warnBtnHeight = 55.0f;
+    float warnGap = 30.0f;
+    float warnStartX = (windowWidth - (warnBtnWidth * 2 + warnGap)) / 2.0f;
+    float warnStartY = decStartY + btnHeight + 40.0f;
+    continueFromSaveRect = sf::FloatRect(warnStartX, warnStartY, warnBtnWidth, warnBtnHeight);
+    createNewCharacterRect = sf::FloatRect(warnStartX + warnBtnWidth + warnGap, warnStartY, warnBtnWidth, warnBtnHeight);
 }
 
 void LobbyScreen::draw(sf::RenderWindow& window) {
@@ -117,6 +130,48 @@ void LobbyScreen::drawDecisionScreen(sf::RenderWindow& window) {
 
     drawBtn(continueButtonRect, (const char*)u8"CHƠI TIẾP", sf::Color(34, 139, 34)); // Xanh lá cây
     drawBtn(newGameButtonRect, (const char*)u8"TẠO MỚI", sf::Color(178, 34, 34));    // Đỏ gạch
+
+    // If dead warning active, draw message and two larger buttons
+    if (deadWarningActive) {
+        // Darken background a bit
+        sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(windowWidth), static_cast<float>(windowHeight)));
+        overlay.setFillColor(sf::Color(0,0,0,160));
+        window.draw(overlay);
+
+        sf::Text warnTitle;
+        warnTitle.setFont(font);
+        warnTitle.setString(UI_TEXT((const char*)u8"Nhân vật của bạn đã thất bại ở lần chơi trước.\nBạn muốn tiếp tục từ điểm lưu gần nhất hay bắt đầu lại?"));
+        warnTitle.setCharacterSize(20);
+        warnTitle.setFillColor(sf::Color::White);
+
+        sf::FloatRect wb = warnTitle.getLocalBounds();
+        warnTitle.setOrigin(wb.left + wb.width/2.0f, wb.top + wb.height/2.0f);
+        warnTitle.setPosition(windowWidth/2.0f, windowHeight*0.35f);
+        window.draw(warnTitle);
+
+        // Buttons
+        auto drawWarnBtn = [&](const sf::FloatRect& rect, const std::string& text, sf::Color color){
+            sf::RectangleShape btn(sf::Vector2f(rect.width, rect.height));
+            btn.setPosition(rect.left, rect.top);
+            btn.setFillColor(color);
+            btn.setOutlineThickness(2);
+            btn.setOutlineColor(sf::Color(200,200,200));
+            window.draw(btn);
+
+            sf::Text btnText;
+            btnText.setFont(font);
+            btnText.setString(UI_TEXT(text.c_str()));
+            btnText.setCharacterSize(18);
+            btnText.setFillColor(sf::Color::White);
+            sf::FloatRect b = btnText.getLocalBounds();
+            btnText.setOrigin(b.left + b.width/2.0f, b.top + b.height/2.0f);
+            btnText.setPosition(rect.left + rect.width/2.0f, rect.top + rect.height/2.0f);
+            window.draw(btnText);
+        };
+
+        drawWarnBtn(continueFromSaveRect, (const char*)u8"Tiếp tục từ điểm lưu", sf::Color(34,139,34));
+        drawWarnBtn(createNewCharacterRect, (const char*)u8"Tạo nhân vật mới", sf::Color(178,34,34));
+    }
 }
 
 void LobbyScreen::drawCharacterCards(sf::RenderWindow& window) {
@@ -167,17 +222,62 @@ void LobbyScreen::handleEvent(const sf::Event& event, sf::RenderWindow& window) 
         // TẦNG 1: XỬ LÝ MÀN HÌNH QUYẾT ĐỊNH
         if (state == LobbyState::DECIDING) {
             if (continueButtonRect.contains(mousePos)) {
-                // Người chơi chọn chơi tiếp -> Lấy class cũ đã lưu trong Database
-                choseContinue = true;
-                selectedClass = static_cast<CharacterClass>(savedClassID);
-                state = LobbyState::CHARACTER_SELECTED; // Cho qua màn sảnh luôn
-                std::cout << "Lobby: Nguoi choi chon CHOI TIEP voi nhan vat cu." << std::endl;
+                // Người chơi chọn chơi tiếp -> need to check if saved full state has HP<=0
+                std::string fullState;
+                bool hasFull = authManager.loadFullGameState(fullState);
+                bool prevDead = false;
+                if (hasFull && !fullState.empty()) {
+                    // parse simple serialized format: playerX,playerY,playerHP;... -> extract playerHP
+                    size_t semi = fullState.find(';');
+                    std::string playerPart = (semi == std::string::npos) ? fullState : fullState.substr(0, semi);
+                    // playerPart: x,y,hp
+                    std::vector<std::string> parts;
+                    std::string cur;
+                    for (char c : playerPart) { if (c == ',') { parts.push_back(cur); cur.clear(); } else cur.push_back(c); }
+                    if (!cur.empty()) parts.push_back(cur);
+                    if (parts.size() >= 3) {
+                        try {
+                            int php = std::stoi(parts[2]);
+                            if (php <= 0) prevDead = true;
+                        } catch(...) {}
+                    }
+                }
+
+                if (prevDead) {
+                    // Show warning dialog
+                    deadWarningActive = true;
+                    std::cout << "Lobby: Phat hien nhan vat da chet lan truoc -> hien thong bao" << std::endl;
+                } else {
+                    // proceed normally
+                    choseContinue = true;
+                    selectedClass = static_cast<CharacterClass>(savedClassID);
+                    state = LobbyState::CHARACTER_SELECTED; // Cho qua màn sảnh luôn
+                    std::cout << "Lobby: Nguoi choi chon CHOI TIEP voi nhan vat cu." << std::endl;
+                }
             }
             else if (newGameButtonRect.contains(mousePos)) {
                 // Người chơi muốn tạo mới -> Chuyển sang màn hình chọn 4 con vật
                 choseContinue = false;
                 state = LobbyState::CHOOSING;
                 std::cout << "Lobby: Nguoi choi chon TAO MOI, mo menu chon linh thu..." << std::endl;
+            }
+            // Handle dead-warning dialog clicks
+            if (deadWarningActive) {
+                if (continueFromSaveRect.contains(mousePos)) {
+                    // User wants to continue from save despite death -> show game-over screen as-is
+                    choseContinue = true;
+                    selectedClass = static_cast<CharacterClass>(savedClassID);
+                    state = LobbyState::CHARACTER_SELECTED;
+                    deadWarningActive = false;
+                    std::cout << "Lobby: Chon 'Tiep tuc tu diem luu' -> tiep tuc voi game-over screen" << std::endl;
+                }
+                else if (createNewCharacterRect.contains(mousePos)) {
+                    // Go to character selection to start over
+                    deadWarningActive = false;
+                    choseContinue = false;
+                    state = LobbyState::CHOOSING;
+                    std::cout << "Lobby: Chon 'Tao nhan vat moi' -> choi lai tu dau" << std::endl;
+                }
             }
         }
         // TẦNG 2: XỬ LÝ MÀN HÌNH CHỌN LINH THÚ (KHI TẠO MỚI)

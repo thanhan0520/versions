@@ -32,6 +32,10 @@ public:
     void setAuthManager(class AuthManager* mgr) { authManager = mgr; }
     void setGameOver(bool v) { isGameOver = v; }
     bool getGameOver() const { return isGameOver; }
+    bool isPaused() const { return paused; }
+    bool shouldReturnToMain() const { return returnToMain; }
+    int getScore() const { return score; }
+    void setScore(int s) { score = s; }
 
 private:
     class AuthManager* authManager;
@@ -55,8 +59,36 @@ private:
     Map map;
 
     Player* player;
+    int score = 0; // player's current score (points from defeated enemies)
+    void addScore(int delta);
     std::vector<qvCc> enemies;
     int selectedEnemyIndex;
 
     std::vector<RootedEffect> rootedEnemies;
+    struct Potion {
+        sf::Vector2f pos;
+        float healAmount;
+        bool alive;
+        sf::CircleShape shape;
+        Potion() : pos(0,0), healAmount(0), alive(true) {}
+    };
+
+    std::vector<Potion> potions;
+    std::vector<bool> enemyCounted; // tracks whether a dead enemy has been scored
+    void spawnPotion(sf::Vector2f pos, float healAmount);
+    const float potionDropRate = 0.25f; // 25% chance
+    const float potionHealFraction = 0.35f; // restores 35% of max HP
+
+    // Pause state and UI
+    bool paused = false;
+    bool returnToMain = false;
+    bool lastEscPressed = false;
+    sf::FloatRect pauseBtnResume;
+    sf::FloatRect pauseBtnSave;
+    sf::FloatRect pauseBtnReturn;
+    sf::FloatRect pauseBtnReturnMain;
+    sf::FloatRect pauseBtnExit;
+    void renderPauseMenu();
+    // HUD pause button
+    sf::FloatRect pauseHudRect;
 };

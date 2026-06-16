@@ -1,3 +1,4 @@
+
 #pragma once
 #include <SFML/Graphics.hpp>
 #include "AuthManager.h"
@@ -23,7 +24,7 @@ public:
     CharacterClass getSelectedClass() const { return selectedClass; }
 
     void initLobby(bool hasOldProgress, int oldClass);
-    void reset() { state = LobbyState::DECIDING; selectedClass = CharacterClass::NONE; }
+    void reset() { state = LobbyState::DECIDING; selectedClass = CharacterClass::NONE; choseContinue = false; hasSavedData = false; updateLayout(); }
     bool isContinuing() const { return choseContinue; }
 
 private:
@@ -45,6 +46,10 @@ private:
 
     sf::FloatRect continueButtonRect;
     sf::FloatRect newGameButtonRect;
+    // When previous save shows the character died, show a warning dialog with two choices
+    bool deadWarningActive;
+    sf::FloatRect continueFromSaveRect;
+    sf::FloatRect createNewCharacterRect;
 
     bool choseContinue;
 

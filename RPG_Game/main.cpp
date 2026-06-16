@@ -80,77 +80,94 @@ int main() {
     }
 
     // ==========================================
-    // BƯỚC 3: KHỞI TẠO GAME VÀ CHÍNH THỨC VÀO ẢI
+    // BƯỚC 3: KHỞI TẠO GAME VÀ VÒNG LẶP TRỞ VỀ SẢNH CHỜ
     // ==========================================
-    if (window.isOpen()) {
+    while (window.isOpen()) {
         std::cout << "Chuyen canh: Dang nap tai nguyen..." << std::endl;
 
-        // Tạo con trỏ Player đa hình tổng quát
+        // Tạo con trỏ Player dựa trên savedCharacterClass
         Player* mainPlayer = nullptr;
-
-        // Ép kiểu số nguyên từ Database/Lobby về enum để kiểm tra loài vật nào
         CharacterClass currentClass = static_cast<CharacterClass>(savedCharacterClass);
+        if (currentClass == CharacterClass::RABBIT) mainPlayer = new Rabbit();
+        else if (currentClass == CharacterClass::FOX) mainPlayer = new Fox();
+        else if (currentClass == CharacterClass::SNAKE) mainPlayer = new Snake();
+        else if (currentClass == CharacterClass::DOG) mainPlayer = new Dog();
+        else mainPlayer = new Player();
 
-        if (currentClass == CharacterClass::RABBIT) {
-            mainPlayer = new Rabbit(); // Khởi tạo đúng chú Thỏ Tốc Độ với chỉ số riêng biệt
-            std::cout << "==> Da trieu hoi THO TOC DO vao tran dau! <==" << std::endl;
-        }
-        // TÍCH HỢP MỚI: Khởi tạo Cáo Kiếm Sĩ nếu được chọn từ Lobby/Database
-        else if (currentClass == CharacterClass::FOX) {
-            mainPlayer = new Fox(); // Khởi tạo đúng Cáo Kiếm Sĩ với bộ kỹ năng cận chiến bẫy dây
-            std::cout << "==> Da trieu hoi CAO KIEM SI vao tran dau! <==" << std::endl;
-        }
-        else if (currentClass == CharacterClass::SNAKE) {
-            mainPlayer = new Snake(); // Khởi tạo đúng Rắn Độc với bộ kỹ năng độc tố
-            std::cout << "==> Da trieu hoi RAN DUC vao tran dau! <==" << std::endl;
-        }
-        else if (currentClass == CharacterClass::DOG) {
-            mainPlayer = new Dog(); // Khởi tạo đúng Chó Dũng Mạnh với bộ kỹ năng cận chiến
-            std::cout << "==> Da trieu hoi CHO DUNG Manh vao tran dau! <==" << std::endl;
-        }
-        else {
-            mainPlayer = new Player();
-            std::cout << "==> Tam thoi khoi tao vi chua co file .h cho cac con vat khac." << std::endl;
-        }
-
-        // Khởi tạo đối tượng Game của bạn
         Game game(window);
-
-        // ĐÃ MỞ COMMENT: Truyền con trỏ đa hình vào hệ thống vận hành game
         game.setPlayer(mainPlayer);
         game.setAuthManager(&authManager);
-
-        // Ensure player's class property is set from savedCharacterClass
+        // Initialize score: if player chose to continue, restore savedScore; otherwise reset score to 0
+        if (lobbyScreen.isContinuing()) {
+            game.setScore(savedScore);
+        } else {
+            game.setScore(0);
+            // ensure DB progress score cleared when starting new game
+            if (authManager.getCurrentUser().length() > 0) {
+                int hpVal = mainPlayer ? static_cast<int>(mainPlayer->getHealth()) : 0;
+                int charClassVal = mainPlayer ? static_cast<int>(mainPlayer->getCharacterClass()) : 0;
+                authManager.saveGameProgress(1, hpVal, static_cast<int>(game.getScore()), charClassVal, mainPlayer ? mainPlayer->getPosition().x : 0.0f, mainPlayer ? mainPlayer->getPosition().y : 0.0f, 0);
+            }
+        }
         if (mainPlayer) mainPlayer->setCharacterClass(currentClass);
 
-        // Nếu người chơi chọn CHƠI TIẾP, cố gắng tải trạng thái đầy đủ từ Database
+        // Nếu người chơi chọn CHƠI TIẾP từ lobby ban đầu
         if (lobbyScreen.isContinuing()) {
             std::string fullState;
             if (authManager.loadFullGameState(fullState)) {
                 if (game.restoreState(fullState)) {
                     std::cout << "==> Da khoi phuc tran dau tu trang thai luu tru! <==" << std::endl;
-                }
-                else {
+                } else {
                     std::cout << "==> Loi khi phuc hoi trang thai. Choi tu dau." << std::endl;
                 }
             }
         }
-
-        // Nếu người chơi tao moi, lưu trạng thái ban dau (player pos/hp va danh sach quai vat)
-        if (!lobbyScreen.isContinuing()) {
-            // Sau khi setPlayer va spawnEnemies, serialize ban dau va luu
+        else {
             std::string startState = game.serializeState();
             authManager.saveFullGameState(startState);
         }
 
         game.run();
 
-        // Giải phóng con trỏ sau khi kết thúc game để tránh rò rỉ bộ nhớ (Memory Leak)
-        if (mainPlayer != nullptr) {
-            delete mainPlayer;
-            mainPlayer = nullptr;
+        bool goToLobby = game.shouldReturnToMain();
+
+        // cleanup player
+        if (mainPlayer != nullptr) { delete mainPlayer; mainPlayer = nullptr; }
+
+        if (!goToLobby) {
+            // normal exit from game (window closed or quit)
+            break;
         }
+
+        // Otherwise, return to lobby flow: reload saved progress and show lobby
+        if (!window.isOpen()) break;
+
+        // load latest progress
+        bool hasProgress = authManager.loadGameProgress(savedStage, savedHp, savedScore, savedCharacterClass);
+        bool isValidOldData = (hasProgress && savedCharacterClass > 0);
+        lobbyScreen.reset();
+        lobbyScreen.initLobby(isValidOldData, savedCharacterClass);
+
+        // Reset the window view to default so lobby UI renders correctly (game may have changed the view)
+        window.setView(window.getDefaultView());
+
+        // Run lobby again until character selected or window closed
+        while (window.isOpen() && lobbyScreen.getState() != LobbyState::CHARACTER_SELECTED) {
+            sf::Event event;
+            while (window.pollEvent(event)) {
+                if (event.type == sf::Event::Closed) window.close();
+                lobbyScreen.handleEvent(event, window);
+            }
+            window.clear();
+            lobbyScreen.draw(window);
+            window.display();
+        }
+
+        if (!window.isOpen()) break;
+
+        savedCharacterClass = static_cast<int>(lobbyScreen.getSelectedClass());
+        std::cout << "Vao game voi nhan vat " << savedCharacterClass << std::endl;
     }
 
     return 0;
-}
+} 
