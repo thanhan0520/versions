@@ -35,6 +35,8 @@ public:
     void applySlow(float slowDuration, float slowPercent);
     void addPoisonStack(float dmgPerSec, float duration);
     void updatePoisonAndSlow(float dt);
+    // Fog-based poison applied by Snake's W: active only while inside fog
+    void setFogPoison(bool active, float dmgPerSec);
 
 private:
     sf::RectangleShape shape;
@@ -52,6 +54,9 @@ private:
     float slowTimer;         // Thời gian còn lại bị làm chậm
     float currentSlowPercent;// Tỉ lệ làm chậm hiện tại (với chiêu W hoặc E)
     std::vector<PoisonEffect> poisonStacks; // Mảng chứa các tầng độc
+    // Fog poison state (persistent only while inside fog)
+    bool fogPoisonActive;
+    float fogPoisonDPS;
 
     float moveTimer;
     bool checkCollision(const sf::FloatRect& rect, const std::vector<std::vector<int>>& tiles, int tileSize);

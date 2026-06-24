@@ -105,9 +105,13 @@ bool Game::restoreState(const std::string& serialized)
             es >> ex >> comma >> ey >> comma >> eh;
             enemies.emplace_back(sf::Vector2f(ex, ey), eh, 10.0f, 80.0f);
         }
-        // initialize enemyCounted vector to same size
+        // initialize enemyCounted vector to reflect which enemies are already dead
         enemyCounted.clear();
         enemyCounted.resize(enemies.size(), false);
+        // If we restored a state where some enemies are already dead, mark them counted
+        for (size_t i = 0; i < enemies.size(); ++i) {
+            enemyCounted[i] = !enemies[i].isAlive();
+        }
         // potions (optional part)
         if (parts.size() > 2 + enemyCount) {
             potions.clear();
@@ -155,10 +159,56 @@ void Game::checkProjectileCollisions()
 
     auto& projectiles = player->getProjectiles();
 
+    // --- Handle Snake W (Poison Fog) effects separately ---
+    // Poison from SNAKE_W should be active only while enemy is inside the fog area
+    for (size_t ei = 0; ei < enemies.size(); ++ei)
+    {
+        auto& enemy = enemies[ei];
+        if (!enemy.isAlive()) continue;
+
+        bool inFog = false;
+        for (auto& proj : projectiles) {
+            if (!proj.isAlive()) continue;
+            if (proj.getType() != BulletType::SNAKE_W) continue;
+            if (proj.getGlobalBounds().intersects(enemy.getGlobalBounds())) {
+                inFog = true;
+                break;
+            }
+        }
+
+        if (inFog) {
+            // Activate fog poison while inside
+            enemy.setFogPoison(true, 3.0f);
+            // Apply a short slow while inside fog (refresh duration)
+            enemy.applySlow(0.2f, 0.45f);
+
+            // Ensure tracking exists so we can detect leave later
+            bool tracked = false;
+            for (auto& ef : poisonFogEffects) {
+                if (ef.enemyIndex == ei) { ef.isInFog = true; tracked = true; break; }
+            }
+            if (!tracked) {
+                PoisonFogEffect ef; ef.enemyIndex = ei; ef.projectileIndex = 0; ef.isInFog = true;
+                poisonFogEffects.push_back(ef);
+            }
+        }
+        else {
+            // Not in fog: ensure fog poison removed immediately
+            enemy.setFogPoison(false, 0.0f);
+            // Remove any tracking
+            for (auto it = poisonFogEffects.begin(); it != poisonFogEffects.end(); ) {
+                if (it->enemyIndex == ei) it = poisonFogEffects.erase(it);
+                else ++it;
+            }
+        }
+    }
+
     for (auto& proj : projectiles)
     {
         if (!proj.isAlive()) continue;
         BulletType pType = proj.getType();
+        // SNAKE_W fog handled in a separate pass above
+        if (pType == BulletType::SNAKE_W) continue;
 
         // 1. XỬ LÝ CHIÊU R CỦA RẮN (AOE - Vùng ảnh hưởng)
         if (pType == BulletType::SNAKE_R)
@@ -239,10 +289,6 @@ void Game::checkProjectileCollisions()
                     else if (pType == BulletType::SNAKE_Q && proj.getChainState() == ChainState::FLYING_OUT) {
                         enemy.addPoisonStack(6.0f, 4.0f);
                         proj.setChainState(ChainState::RETRACTING);
-                    }
-                    else if (pType == BulletType::SNAKE_W) {
-                        enemy.applySlow(0.6f, 0.45f);
-                        enemy.addPoisonStack(3.0f, 2.0f);
                     }
                 }
 
@@ -857,60 +903,102 @@ void Game::renderPauseMenu()
     sf::View prev = window.getView();
     sf::Vector2f viewPos = window.getView().getCenter();
     sf::Vector2f viewSize = window.getView().getSize();
-
+    // Semi-transparent overlay
     sf::RectangleShape overlay(viewSize);
     overlay.setPosition(viewPos.x - viewSize.x/2, viewPos.y - viewSize.y/2);
-    overlay.setFillColor(sf::Color(0,0,0,180));
+    overlay.setFillColor(sf::Color(0,0,0,160));
     window.draw(overlay);
 
+    // Load font (fallback to Arial)
     sf::Font f;
     if (!f.loadFromFile("C:/Windows/Fonts/segoeui.ttf")) {
         f.loadFromFile("C:/Windows/Fonts/arial.ttf");
     }
 
+    // Panel styling - enlarged for bold, highly-visible UI
+    float panelWidth = std::max(720.0f, viewSize.x * 0.6f);
+    float panelPadding = 42.0f;
+    float btnHeight = 96.0f;
+    float btnGap = 28.0f;
+
+    // Prepare texts to measure sizes
     sf::Text title;
     title.setFont(f);
     title.setString(UI_TEXT((const char*)u8"PAUSED"));
-    title.setCharacterSize(36);
+    title.setCharacterSize(72);
     title.setFillColor(sf::Color::White);
     sf::FloatRect tb = title.getLocalBounds();
+
+    std::vector<std::string> labels = { "Tiếp tục", "Lưu game", "Về sảnh chờ", "Thoát game" };
+    std::vector<sf::Text> texts;
+    float maxTextWidth = 0.0f;
+    for (auto &lab : labels) {
+        sf::Text t;
+        t.setFont(f);
+        t.setString(UI_TEXT(lab.c_str()));
+        t.setCharacterSize(36);
+        t.setFillColor(sf::Color::White);
+        sf::FloatRect r = t.getLocalBounds();
+        maxTextWidth = std::max(maxTextWidth, r.width);
+        texts.push_back(t);
+    }
+
+    // Buttons will stretch to nearly full panel width for emphasis
+    float btnWidth = std::max(520.0f, panelWidth - panelPadding*2);
+
+    float panelHeight = panelPadding*2 + tb.height + 12.0f + (btnHeight * texts.size()) + (btnGap * (texts.size()-1));
+    sf::Vector2f panelPos(viewPos.x - panelWidth/2.0f, viewPos.y - panelHeight/2.0f);
+
+    // Panel shadow
+    sf::RectangleShape panelShadow(sf::Vector2f(panelWidth+8.0f, panelHeight+8.0f));
+    panelShadow.setPosition(panelPos + sf::Vector2f(6.0f, 6.0f));
+    panelShadow.setFillColor(sf::Color(0,0,0,140));
+    window.draw(panelShadow);
+
+    // Panel background
+    sf::RectangleShape panel(sf::Vector2f(panelWidth, panelHeight));
+    panel.setPosition(panelPos);
+    panel.setFillColor(sf::Color(28,28,28,220));
+    panel.setOutlineThickness(2.0f);
+    panel.setOutlineColor(sf::Color(100,100,100,200));
+    window.draw(panel);
+
+    // Title
     title.setOrigin(tb.left + tb.width/2, tb.top + tb.height/2);
-    title.setPosition(viewPos.x, viewPos.y - 80);
+    title.setPosition(viewPos.x, panelPos.y + panelPadding + tb.height/2 - 6.0f);
     window.draw(title);
 
-    // Buttons: Resume (Tiếp tục), Save (Lưu game), Return to Lobby (Về sảnh chờ), Exit (Thoát game)
-    pauseBtnResume = sf::FloatRect(viewPos.x - 260, viewPos.y - 30, 180, 70);
-    pauseBtnSave = sf::FloatRect(viewPos.x - 60, viewPos.y - 30, 180, 70);
-    pauseBtnReturnMain = sf::FloatRect(viewPos.x + 140, viewPos.y - 30, 200, 70);
-    pauseBtnExit = sf::FloatRect(viewPos.x + 360, viewPos.y - 30, 160, 70);
+    // Buttons stacked vertically
+    float startY = panelPos.y + panelPadding + tb.height + 12.0f;
+    for (size_t i = 0; i < texts.size(); ++i) {
+        float bx = viewPos.x - btnWidth/2.0f;
+        float by = startY + i * (btnHeight + btnGap);
 
-    sf::RectangleShape b1(sf::Vector2f(pauseBtnResume.width, pauseBtnResume.height));
-    b1.setPosition(pauseBtnResume.left, pauseBtnResume.top);
-    b1.setFillColor(sf::Color(70,130,180));
-    window.draw(b1);
-    sf::Text t1; t1.setFont(f); t1.setString(UI_TEXT((const char*)u8"Tiếp tục")); t1.setCharacterSize(26); t1.setFillColor(sf::Color::White);
-    sf::FloatRect tb1 = t1.getLocalBounds(); t1.setOrigin(tb1.left + tb1.width/2, tb1.top + tb1.height/2); t1.setPosition(pauseBtnResume.left + pauseBtnResume.width/2, pauseBtnResume.top + pauseBtnResume.height/2); window.draw(t1);
+        sf::FloatRect btnRect(bx, by, btnWidth, btnHeight);
 
-    sf::RectangleShape b2(sf::Vector2f(pauseBtnSave.width, pauseBtnSave.height));
-    b2.setPosition(pauseBtnSave.left, pauseBtnSave.top);
-    b2.setFillColor(sf::Color(34,139,34));
-    window.draw(b2);
-    sf::Text t2; t2.setFont(f); t2.setString(UI_TEXT((const char*)u8"Lưu game")); t2.setCharacterSize(26); t2.setFillColor(sf::Color::White);
-    sf::FloatRect tb2 = t2.getLocalBounds(); t2.setOrigin(tb2.left + tb2.width/2, tb2.top + tb2.height/2); t2.setPosition(pauseBtnSave.left + pauseBtnSave.width/2, pauseBtnSave.top + pauseBtnSave.height/2); window.draw(t2);
+        // store clickable rects so event handling works
+        if (i == 0) pauseBtnResume = btnRect;
+        else if (i == 1) pauseBtnSave = btnRect;
+        else if (i == 2) pauseBtnReturnMain = btnRect;
+        else if (i == 3) pauseBtnExit = btnRect;
 
-    sf::RectangleShape b3(sf::Vector2f(pauseBtnReturnMain.width, pauseBtnReturnMain.height));
-    b3.setPosition(pauseBtnReturnMain.left, pauseBtnReturnMain.top);
-    b3.setFillColor(sf::Color(200,140,20));
-    window.draw(b3);
-    sf::Text t3; t3.setFont(f); t3.setString(UI_TEXT((const char*)u8"Về sảnh chờ")); t3.setCharacterSize(22); t3.setFillColor(sf::Color::White);
-    sf::FloatRect tb3 = t3.getLocalBounds(); t3.setOrigin(tb3.left + tb3.width/2, tb3.top + tb3.height/2); t3.setPosition(pauseBtnReturnMain.left + pauseBtnReturnMain.width/2, pauseBtnReturnMain.top + pauseBtnReturnMain.height/2); window.draw(t3);
+        sf::RectangleShape b(sf::Vector2f(btnWidth, btnHeight));
+        b.setPosition(bx, by);
+        // Color by index
+        if (i == 0) b.setFillColor(sf::Color(70,130,180));
+        else if (i == 1) b.setFillColor(sf::Color(34,139,34));
+        else if (i == 2) b.setFillColor(sf::Color(200,140,20));
+        else b.setFillColor(sf::Color(178,34,34));
+        b.setOutlineThickness(2.0f);
+        b.setOutlineColor(sf::Color(220,220,220,160));
+        window.draw(b);
 
-    sf::RectangleShape b4(sf::Vector2f(pauseBtnExit.width, pauseBtnExit.height));
-    b4.setPosition(pauseBtnExit.left, pauseBtnExit.top);
-    b4.setFillColor(sf::Color(178,34,34));
-    window.draw(b4);
-    sf::Text t4; t4.setFont(f); t4.setString(UI_TEXT((const char*)u8"Thoát game")); t4.setCharacterSize(22); t4.setFillColor(sf::Color::White);
-    sf::FloatRect tb4 = t4.getLocalBounds(); t4.setOrigin(tb4.left + tb4.width/2, tb4.top + tb4.height/2); t4.setPosition(pauseBtnExit.left + pauseBtnExit.width/2, pauseBtnExit.top + pauseBtnExit.height/2); window.draw(t4);
+        sf::Text &tt = texts[i];
+        sf::FloatRect tbr = tt.getLocalBounds();
+        tt.setOrigin(tbr.left + tbr.width/2, tbr.top + tbr.height/2);
+        tt.setPosition(bx + btnWidth/2.0f, by + btnHeight/2.0f - 4.0f);
+        window.draw(tt);
+    }
 
     window.setView(prev);
 }
@@ -922,10 +1010,10 @@ void Game::renderGameOver()
     sf::View prev = window.getView();
     sf::Vector2f viewPos = window.getView().getCenter();
     sf::Vector2f viewSize = window.getView().getSize();
-
+    // overlay
     sf::RectangleShape overlay(viewSize);
     overlay.setPosition(viewPos.x - viewSize.x/2, viewPos.y - viewSize.y/2);
-    overlay.setFillColor(sf::Color(0,0,0,180));
+    overlay.setFillColor(sf::Color(0,0,0,170));
     window.draw(overlay);
 
     sf::Font f;
@@ -933,62 +1021,80 @@ void Game::renderGameOver()
         f.loadFromFile("C:/Windows/Fonts/arial.ttf");
     }
 
+    // Title
     sf::Text title;
     title.setFont(f);
     title.setString(UI_TEXT((const char*)u8"BẠN ĐÃ CHẾT"));
-    title.setCharacterSize(40);
+    title.setCharacterSize(84);
     title.setFillColor(sf::Color::White);
     sf::FloatRect tb = title.getLocalBounds();
-    title.setOrigin(tb.left + tb.width/2, tb.top + tb.height/2);
-    title.setPosition(viewPos.x, viewPos.y - 60);
-    window.draw(title);
 
-    // Buttons: size them dynamically to fit their text
-    sf::Text t1;
-    t1.setFont(f);
-    t1.setString(UI_TEXT((const char*)u8"TRỞ VỀ MÀN HÌNH CHÍNH"));
-    t1.setCharacterSize(18);
-    t1.setFillColor(sf::Color::White);
+    // Buttons texts (bolder/larger)
+    sf::Text t1; t1.setFont(f); t1.setString(UI_TEXT((const char*)u8"TRỞ VỀ MÀN HÌNH CHÍNH")); t1.setCharacterSize(36); t1.setFillColor(sf::Color::White);
+    sf::Text t2; t2.setFont(f); t2.setString(UI_TEXT((const char*)u8"HỒI SINH")); t2.setCharacterSize(36); t2.setFillColor(sf::Color::White);
     sf::FloatRect tb1 = t1.getLocalBounds();
-
-    sf::Text t2;
-    t2.setFont(f);
-    t2.setString(UI_TEXT((const char*)u8"HỒI SINH"));
-    t2.setCharacterSize(18);
-    t2.setFillColor(sf::Color::White);
     sf::FloatRect tb2 = t2.getLocalBounds();
 
-    float paddingX = 40.0f; // horizontal padding inside button
-    float paddingY = 20.0f; // vertical padding inside button
-    float gap = 20.0f; // gap between buttons
+    float paddingX = 64.0f; // horizontal padding inside button
+    float paddingY = 28.0f; // vertical padding inside button
+    float gap = 28.0f; // gap between buttons
 
-    float btnWidth1 = tb1.width + paddingX;
-    float btnWidth2 = tb2.width + paddingX;
-    float btnHeight = std::max(tb1.height, tb2.height) + paddingY;
+    float btnHeightLocal = std::max(tb1.height, tb2.height) + paddingY;
 
-    float totalWidth = btnWidth1 + gap + btnWidth2;
-    float leftStart = viewPos.x - totalWidth/2.0f;
-    float top = viewPos.y + 10.0f;
+    // Make panel wide and prominent
+    float panelWidth = std::max(760.0f, viewSize.x * 0.62f);
+    float panelPadding = 48.0f;
+    float btnWidth = panelWidth - panelPadding*2;
+    float panelHeight = panelPadding*2 + tb.height + 18.0f + btnHeightLocal*2 + gap;
+    sf::Vector2f panelPos(viewPos.x - panelWidth/2.0f, viewPos.y - panelHeight/2.0f);
 
-    gameOverBtnNew = sf::FloatRect(leftStart, top, btnWidth1, btnHeight);
-    gameOverBtnRevive = sf::FloatRect(leftStart + btnWidth1 + gap, top, btnWidth2, btnHeight);
+    // Panel background and shadow
+    sf::RectangleShape panelShadow(sf::Vector2f(panelWidth+8.0f, panelHeight+8.0f));
+    panelShadow.setPosition(panelPos + sf::Vector2f(6.0f,6.0f));
+    panelShadow.setFillColor(sf::Color(0,0,0,160));
+    window.draw(panelShadow);
+
+    sf::RectangleShape panel(sf::Vector2f(panelWidth, panelHeight));
+    panel.setPosition(panelPos);
+    panel.setFillColor(sf::Color(28,28,28,235));
+    panel.setOutlineThickness(2.0f);
+    panel.setOutlineColor(sf::Color(130,130,130,210));
+    window.draw(panel);
+
+    // Draw title
+    title.setOrigin(tb.left + tb.width/2, tb.top + tb.height/2);
+    title.setPosition(viewPos.x, panelPos.y + panelPadding + tb.height/2 - 8.0f);
+    window.draw(title);
+
+    // Buttons positions (stacked, large)
+    float startY = panelPos.y + panelPadding + tb.height + 18.0f;
+    float bx = viewPos.x - btnWidth/2.0f;
+    float by1 = startY;
+    float by2 = startY + btnHeightLocal + gap;
+
+    gameOverBtnNew = sf::FloatRect(bx, by1, btnWidth, btnHeightLocal);
+    gameOverBtnRevive = sf::FloatRect(bx, by2, btnWidth, btnHeightLocal);
 
     sf::RectangleShape b1(sf::Vector2f(gameOverBtnNew.width, gameOverBtnNew.height));
     b1.setPosition(gameOverBtnNew.left, gameOverBtnNew.top);
     b1.setFillColor(sf::Color(178,34,34));
+    b1.setOutlineThickness(3.0f);
+    b1.setOutlineColor(sf::Color(220,220,220,200));
     window.draw(b1);
     tb1 = t1.getLocalBounds();
     t1.setOrigin(tb1.left + tb1.width/2, tb1.top + tb1.height/2);
-    t1.setPosition(gameOverBtnNew.left + gameOverBtnNew.width/2, gameOverBtnNew.top + gameOverBtnNew.height/2);
+    t1.setPosition(gameOverBtnNew.left + gameOverBtnNew.width/2, gameOverBtnNew.top + gameOverBtnNew.height/2 - 4);
     window.draw(t1);
 
-    sf::RectangleShape b2(sf::Vector2f(gameOverBtnRevive.width, gameOverBtnRevive.height));
-    b2.setPosition(gameOverBtnRevive.left, gameOverBtnRevive.top);
-    b2.setFillColor(sf::Color(34,139,34));
-    window.draw(b2);
+    sf::RectangleShape b2shape(sf::Vector2f(gameOverBtnRevive.width, gameOverBtnRevive.height));
+    b2shape.setPosition(gameOverBtnRevive.left, gameOverBtnRevive.top);
+    b2shape.setFillColor(sf::Color(34,139,34));
+    b2shape.setOutlineThickness(3.0f);
+    b2shape.setOutlineColor(sf::Color(220,220,220,200));
+    window.draw(b2shape);
     tb2 = t2.getLocalBounds();
     t2.setOrigin(tb2.left + tb2.width/2, tb2.top + tb2.height/2);
-    t2.setPosition(gameOverBtnRevive.left + gameOverBtnRevive.width/2, gameOverBtnRevive.top + gameOverBtnRevive.height/2);
+    t2.setPosition(gameOverBtnRevive.left + gameOverBtnRevive.width/2, gameOverBtnRevive.top + gameOverBtnRevive.height/2 - 4);
     window.draw(t2);
 
     window.setView(prev);

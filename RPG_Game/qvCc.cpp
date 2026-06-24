@@ -12,6 +12,14 @@ qvCc::qvCc(sf::Vector2f startPos, float health, float damage, float speed)
     shape.setPosition(startPos);
     targetPosition = startPos;
     velocity = sf::Vector2f(0, 0);
+    fogPoisonActive = false;
+    fogPoisonDPS = 0.0f;
+}
+
+void qvCc::setFogPoison(bool active, float dmgPerSec)
+{
+    fogPoisonActive = active;
+    fogPoisonDPS = active ? dmgPerSec : 0.0f;
 }
 
 bool qvCc::checkCollision(const sf::FloatRect& rect, const std::vector<std::vector<int>>& tiles, int tileSize)
@@ -79,11 +87,16 @@ void qvCc::updatePoisonAndSlow(float dt)
         }
     }
 
+    // Apply fog poison damage only while the enemy is inside the fog (no stacking)
+    if (fogPoisonActive) {
+        health -= fogPoisonDPS * dt;
+    }
+
     // Khóa máu không cho âm bậy để thanh máu hiển thị chính xác
     if (health < 0.0f) health = 0.0f;
 
     // 2. Xử lý giảm tốc chạy và đổi màu sắc nhận diện trạng thái quái vật
-    if (slowTimer > 0.0f || !poisonStacks.empty())
+    if (slowTimer > 0.0f || !poisonStacks.empty() || fogPoisonActive)
     {
         if (slowTimer > 0.0f) {
             slowTimer -= dt;

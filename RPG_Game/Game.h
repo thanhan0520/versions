@@ -12,6 +12,12 @@ struct RootedEffect {
     float duration;
 };
 
+struct PoisonFogEffect {
+    size_t enemyIndex;
+    size_t projectileIndex;
+    bool isInFog;
+};
+
 class Game
 {
 public:
@@ -65,6 +71,7 @@ private:
     int selectedEnemyIndex;
 
     std::vector<RootedEffect> rootedEnemies;
+    std::vector<PoisonFogEffect> poisonFogEffects;
     struct Potion {
         sf::Vector2f pos;
         float healAmount;

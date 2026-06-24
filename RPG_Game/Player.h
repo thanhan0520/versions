@@ -1,6 +1,7 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <vector>
+#include <string>
 #include "Bullet.h"
 #include "qvCc.h" 
 
@@ -55,6 +56,9 @@ public:
     void autoTargetClosestEnemy(const std::vector<qvCc>& enemies);
     CharacterClass getCharacterClass() const { return currentClass; }
     void setCharacterClass(CharacterClass c) { currentClass = c; }
+
+    // Optional human-readable description for UI
+    virtual std::string getDescription() const { return std::string(); }
 
 protected:
     CharacterClass currentClass;

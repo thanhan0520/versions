@@ -213,6 +213,8 @@ void LobbyScreen::drawCharacterCards(sf::RenderWindow& window) {
         nameTxt.setPosition(cards[i].rect.left + cards[i].rect.width / 2.0f, cards[i].rect.top + cards[i].rect.height - 40.0f);
         window.draw(nameTxt);
     }
+
+    // (No character hover description panel)
 }
 
 void LobbyScreen::handleEvent(const sf::Event& event, sf::RenderWindow& window) {

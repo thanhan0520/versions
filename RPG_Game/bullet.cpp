@@ -60,6 +60,8 @@ Bullet::Bullet(sf::Vector2f startPos, sf::Vector2f dir, float moveSpeed, float d
         shape.setFillColor(sf::Color(144, 238, 144, 100));
         shape.setOrigin(60.0f, 60.0f);
         shape.setPosition(position);
+        // Poison fog should not last forever — set a lifetime so it expires automatically
+        maxLifetime = 6.0f; // seconds; adjust as needed for gameplay balance
     }
     else if (type == BulletType::SNAKE_E) {
         shape.setSize(sf::Vector2f(20.0f, 20.0f));
